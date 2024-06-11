@@ -4,6 +4,7 @@ use BlockDist;
 use Random;
 use BitOps;
 use Reflection;
+use List;
 
 import Reflection.canResolveMethod;
 record ContrivedComparator {
@@ -318,7 +319,6 @@ writeln();
 // 1. Get neighbor count.
 var neighborCount = blockDist.createArray(uniqueVertices.domain, atomic int);
 forall u in sortedSrcNoLoopsNoDupsOneUp do neighborCount[u].add(1);
-writeln(neighborCount);
 var neighborCountNotAtomic = blockDist.createArray(uniqueVertices.domain, int);
 forall i in neighborCount.domain do 
     neighborCountNotAtomic[i] = neighborCount[i].read();
@@ -328,7 +328,6 @@ var neighborCountScan = + scan neighborCountNotAtomic;
 var segments = blockDist.createArray({0..uniqueVertices.size}, int);
 segments[0] = 0;
 segments[1..] = neighborCountScan;
-writeln(segments);
 
 writeln("Edge-centric data structure:");
 writeln("src = ", sortedSrcNoLoopsNoDupsOneUp);
@@ -337,4 +336,22 @@ writeln("seg = ", segments);
 writeln();
 
 /**********VERTEX-CENTRIC DATA STRUCTURE**********/
+record vertex {
+    var adjacencyList:list(int,parSafe=true);
 
+    proc ref sortAdjacencyList() {
+        this.adjacencyList.sort();
+    }
+}
+
+var vertices = blockDist.createArray({0..<uniqueVertices.size}, vertex);
+
+forall (u,v) in zip(sortedSrcNoLoopsNoDupsOneUp,sortedDstNoLoopsNoDupsOneUp) {
+    ref currVertex = vertices[u];
+    currVertex.adjacencyList.pushBack(v);
+}
+
+forall l in vertices do l.sortAdjacencyList();
+
+for (v,l) in zip(vertices.domain,vertices) do 
+    writeln("Vertex ", v, " has adjacency list ", l.adjacencyList);
