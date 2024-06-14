@@ -1,14 +1,28 @@
+/*
+  This module contains the implementation of an edge-centric undirected graph.
+  In other words, this is a graph whose edge list is block-distributed across
+  locales. No special care is taken to ensure vertex neighborhoods are kept
+  local.
+*/
 module EdgeCentricGraph {
   use Utils;
   use BlockDist;
+  use Search;
 
+  /*
+    Class that represents a graph in an edge-centric manner. 
+  */
   class EdgeCentricGraph {
-    var source;
-    var destination;
-    var vertices;
-    var segments;
+    var src;
+    var dst;
+    var seg;
+    var vertexMapper;
 
-    proc init(const ref src: [?sD] int, const ref dst: [?dD] int) {
+    /*
+      Using two existing arrays that represent the source and destination
+      vertices of a graph, initialize an `EdgeCentricGraph` object.
+    */
+    proc init(src: [?sD] int, dst: [?dD] int) {
       var (symmSrc, symmDst) = symmetrizeEdgeList(src, dst);
       var (sortedSymmSrc, sortedSymmDst) = sortEdgeList(symmSrc, symmDst);
       var (looplessSortedSymmSrc, looplessSortedSymmDst) = removeSelfLoops(
@@ -19,40 +33,42 @@ module EdgeCentricGraph {
           looplessSortedSymmSrc,
           looplessSortedSymmDst
       );
+
       var (finalSrc, finalDst, vertices) = oneUpper(
         deduppedLooplessSortedSymmSrc,
         deduppedLooplessSortedSymmDst
       );
 
-      var (srcUnique, srcCounts) = uniqueFromSorted(src);
-      var srcSegments = (+ scan srcCounts) - srcCounts;
+      var (srcUnique, srcCounts) = uniqueFromSorted(finalSrc);
+      var srcCumulativeCounts = + scan srcCounts;
+      var segments = blockDist.createArray({0..srcUnique.size}, int);
+      segments[0] = 0;
+      segments[1..] = srcCumulativeCounts;
 
-      this.source = finalSrc; 
-      this.destination = finalDst;
-      this.vertices = vertices;
-
-      // var neighborCount = blockDist.createArray(
-      //   this.vertices.domain, atomic int
-      // );
-      // forall u in this.source do neighborCount[u].add(1);
-      
-      // var neighborCountNotAtomic = blockDist.createArray(
-      //   this.vertices.domain, int
-      // );
-      // forall i in neighborCount.domain do
-      //   neighborCountNotAtomic[i] = neighborCount[i].read();
-
-      // var neighborCountScan = + scan neighborCountNotAtomic;
-      // var segments = blockDist.createArray({0..this.vertices.size}, int);
-      // segments[0] = 0;
-      // segments[1..] = neighborCountScan;
-
-      this.segments = srcSegments;
+      this.src = finalSrc; 
+      this.dst = finalDst;
+      this.seg = segments;
+      this.vertexMapper = vertices;
     }
 
-    proc neighbors(n:int) {
-      const ref neighborhood = 
-        this.destination[this.segments[n]..<this.segments[n+1]];
+    /*
+      Returns the array slice containing the neighbors of a given vertex `u`. 
+      Expects `u` to be an original vertex value, requiring a search to get the 
+      internal representation of the vertex `u` which is equivalent to the index 
+      of where `u` appears in `this.vertexMapper`.
+    */
+    proc neighbors(u:int) {
+      var (_,ui) = binarySearch(this.vertexMapper, u);
+      const ref neighborhood = this.dst[this.seg[ui]..<this.seg[ui+1]];
+      return neighborhood;
+    }
+
+    /* 
+      Similar to method `neighbors` but instead returns the neighbors of `ui`
+      assuming that `ui` is the internal representation of a vertex `u`.
+    */
+    proc neighborsInternal(ui:int) {
+      const ref neighborhood = this.dst[this.seg[ui]..<this.seg[ui+1]];
       return neighborhood;
     }
   }

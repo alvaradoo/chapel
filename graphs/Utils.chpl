@@ -1,12 +1,16 @@
+/*
+  Contains utilities that are used in graph construction within the modules 
+  `EdgeCentricGraph` and `VertexCentricGraph`. Some of them are copied from 
+  Arkouda functionality and adapted to work here.
+*/
 module Utils {
   use Sort;
-  use Search;
   use BlockDist;
   use BitOps;
   use List;
   use CopyAggregation;
 
-  import Reflection.canResolveMethod;
+  /* Pulled from Arkouda. Used as the comparator for arrays made of tuples. */
   record contrivedComparator {
     const dc = new DefaultComparator();
     proc keyPart(a, i: int) {
@@ -72,8 +76,10 @@ module Utils {
   private param numBuckets = 1 << bitsPerDigit;
   private param maskDigit = numBuckets-1;
 
-  /* Pulled from Arkouda, gets the maximum bit width of the array and if there 
-  are any negative numbers */
+  /* 
+    Pulled from Arkouda, gets the maximum bit width of the array and if there 
+    are any negative numbers.
+  */
   inline proc getBitWidth(a: [?aD] int): (int, bool) {
     var aMin = min reduce a;
     var aMax = max reduce a;
@@ -86,8 +92,10 @@ module Utils {
     return (bitWidth, negs);
   }
 
-  /* Pulled from Arkouda, for two arrays returns array with bit width and 
-  negative information */
+  /* 
+    Pulled from Arkouda, for two arrays returns array with bit width and 
+    negative information.
+  */
   proc getNumDigitsNumericArrays(arr1, arr2) {
     var bitWidths: [0..<2] int;
     var negs: [0..<2] bool;
@@ -102,8 +110,10 @@ module Utils {
     return (totalDigits, bitWidths, negs);
   }
 
-  /* Pulled from Arkouda, get the digits for the current rshift. Signbit needs 
-  to be inverted for negative values */
+  /* 
+    Pulled from Arkouda, get the digits for the current rshift. Signbit needs 
+    to be inverted for negative values 
+  */
   inline proc getDigit(key: int, rshift: int, last: bool, negs: bool): int {
     const invertSignBit = last && negs;
     const xor = (invertSignBit:uint << (RSLSD_bitsPerDigit-1));
@@ -112,8 +122,10 @@ module Utils {
     return (((keyu >> rshift) & (maskDigit:uint)) ^ xor):int;
   }
 
-  /* Pulled from Arkouda, return an array of all values from array a 
-  whose index corresponds to a true value in array truth */
+  /* 
+    Pulled from Arkouda, return an array of all values from array a whose index
+    corresponds to a true value in array `truth`.
+  */
   proc boolIndexer(a: [?aD] ?t, truth: [aD] bool) {
     var iv: [truth.domain] int = (+ scan truth);
     var pop = iv[iv.size-1];
@@ -125,6 +137,10 @@ module Utils {
     return ret;
   }
 
+  /*
+    Given two arrays `src` and `dst`, it symmetrizes the edge list. In other
+    words, it concatenates `dst` to `src` and `src` to `dst`.
+  */
   proc symmetrizeEdgeList(src, dst) {
     var m = src.size;
 
@@ -137,7 +153,10 @@ module Utils {
     return (symmSrc, symmDst);
   }
 
-  /* Pulled from Arkouda, removes duplicate keys from sorted arrays */
+  /* 
+    Pulled from Arkouda. Given an array, `sorted`, generates the unique values
+    of the array and the counts of each value, if `needCounts` is set to `true`.
+  */
   proc uniqueFromSorted(sorted: [?aD] ?t, param needCounts = true) {
     var truth = blockDist.createArray(aD, bool);
     truth[0] = true;
@@ -145,12 +164,14 @@ module Utils {
     var allUnique: int = + reduce truth;
 
     if allUnique == aD.size {
+      var u = blockDist.createArray(aD, t);
+      u = sorted;
       if needCounts {
-        var c = blockDist.createArray({0..<aD.size}, int);
+        var c = blockDist.createArray(aD, int);
         c = 1;
-        return (sorted, c);
+        return (u, c);
       } else {
-        return sorted;
+        return u;
       }
     }
 
@@ -182,11 +203,17 @@ module Utils {
     }
   }
 
+  /*
+    Mostly pulled from Arkouda. It creates a merged array from considering 
+    `src` as the initial digits and appending `dst` to the end. It sorts the
+    newly merged array and then returns new versions `src` and `dst` based off
+    the sort.
+  */
   proc sortEdgeList(in src, in dst) {
     var (totalDigits,bitWidths,negs) = getNumDigitsNumericArrays(src, dst);
     var m = src.size;
 
-    /* Pulled from Arkouda to merge two arrays into one for radix sort */
+    /* Pulled from Arkouda to merge two arrays into one for radix sort. */
     proc mergeNumericArrays(param numDigits,size,totalDigits,bitWidths,negs) {
       var merged = blockDist.createArray(
         {0..<size}, 
@@ -251,6 +278,10 @@ module Utils {
     return (sortedSrc, sortedDst);
   }
 
+  /*
+    Given two arrays, find instances of where src[i] == dst[i] and removes these
+    self-loops.
+  */
   proc removeSelfLoops(src, dst) {
     var loops = src != dst;
     var noLoopsSrc = boolIndexer(src, loops);
@@ -259,6 +290,10 @@ module Utils {
     return (noLoopsSrc, noLoopsDst);
   }
 
+  /*
+    Given two arrays, assumed to have been previously sorted by `sortEdgeList`, 
+    removes duplicated edges.
+  */
   proc removeMultipleEdges(src: [?sD] int, dst) {
     var edgesAsTuples = blockDist.createArray(
       sD, (int,int)
@@ -267,7 +302,7 @@ module Utils {
     forall (e, i) in zip(edgesAsTuples, edgesAsTuples.domain) do
       e = (src[i], dst[i]);
 
-    var (uniqueEdges, edgeCount) = uniqueFromSorted(edgesAsTuples);
+    var uniqueEdges = uniqueFromSorted(edgesAsTuples, needCounts = false);
     var eD = uniqueEdges.domain;
     var noDupsSrc = blockDist.createArray(eD,int);
     var noDupsDst = blockDist.createArray(eD,int);
@@ -280,7 +315,9 @@ module Utils {
     return (noDupsSrc, noDupsDst);
   }
 
-  // Sort an array and return iv.
+  /*
+    Wrapper to return the permutation that will sort the array `arr`.
+  */
   proc argsort(arr) {
     var AI = blockDist.createArray(arr.domain, (arr.eltType,int));
     var iv = blockDist.createArray(arr.domain, int);
@@ -294,7 +331,11 @@ module Utils {
     return iv;
   }
 
-  proc oneUpper(src: [?sD], dst) {
+  /*
+    Remaps the values within `src` and `dst` to the range `0..n-1` where `n` is
+    the number of vertices in the graph.
+  */
+  proc oneUpper(src: [?sD], in dst) {
     var srcPerm = blockDist.createArray(sD, int);
     forall (s,i) in zip(srcPerm, srcPerm.domain) do s=i;
     var (srcUnique, srcCounts) = uniqueFromSorted(src);
@@ -307,43 +348,29 @@ module Utils {
     var dstSegments = (+ scan dstCounts) - dstCounts;
 
     var vals = blockDist.createArray(srcUnique.domain, int);
+    forall (v,i) in zip(vals, vals.domain) do v=i;
 
     var newSrc = broadcast(srcPerm, srcSegments, vals);
     var newDst = broadcast(dstPerm, dstSegments, vals);
-    
-    // var allVertices = blockDist.createArray({0..<eD.size*2}, int);
-    // allVertices[0..<eD.size] = src;
-    // allVertices[eD.size..<eD.size*2] = dst;
-    // Sort.TwoArrayDistributedRadixSort.twoArrayDistributedRadixSort(
-    //   allVertices
-    // );
-    // var uniqueVertices = uniqueFromSorted(allVertices, needCounts);
-    // var oneUppedSrc = blockDist.createArray(eD, int);
-    // var oneUppedDst = blockDist.createArray(eD, int);
-
-    // forall i in eD {
-    //   oneUppedSrc[i] = Search.binarySearch(
-    //     uniqueVertices,
-    //     src[i]
-    //   )[1]; // TODO: Needs aggregator? Distributed binary search?
-    //   oneUppedDst[i] = Search.binarySearch(
-    //     uniqueVertices,
-    //     dst[i]
-    //   )[1]; // TODO: Needs aggregator? Distributed binary search?
-    // }
 
     return (newSrc, newDst, srcUnique);
   }
 
-  /* Pulled from Arkouda. 
-   * Broadcast a value per segment of a segmented array to the
-   * original ordering of the precursor array. For example, if
-   * the original array was sorted and grouped, resulting in 
-   * groups defined by <segs>, and if <vals> contains group labels,
-   * then return the array of group labels corresponding to the 
-   * original array. Intended to be used with arkouda.GroupBy.
+  /* 
+    Pulled from Arkouda. 
+    Broadcast a value per segment of a segmented array to the original ordering 
+    of the precursor array. For example, if the original array was sorted and 
+    grouped, resulting in groups defined by <segs>, and if <vals> contains group 
+    labels, then return the array of group labels corresponding to the original 
+    array. Intended to be used with arkouda.GroupBy.
+
+    For our intents and purposes, arkouda.GroupBy can be mimicked by running
+    `uniqueFromSorted` to get counts that can be used to build `segs`. Further, 
+    the `perm` can be computed by `argort`. Lastly, `vals` is whatever values
+    need to be broadcasted and is typically of the same size as the number of
+    unique elements in the array.
    */
-  proc broadcast(perm: [?D] int, segs: [?sD] int, vals: [sD] ?t) throws {
+  proc broadcast(perm: [?D] int, segs: [?sD] int, vals: [sD] ?t) {
     if sD.size == 0 {
       // early out if size 0
       return blockDist.createArray({0..<D.size}, t);
