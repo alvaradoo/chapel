@@ -9,6 +9,7 @@ module EdgeCentricGraph {
   use BlockDist;
   use ReplicatedDist;
   use Search;
+  use MemDiagnostics;
 
   /*
     Stores into a replicated array the low, high, and locale identifier of
@@ -90,8 +91,11 @@ module EdgeCentricGraph {
       Returns the array slice containing the neighbors of a given vertex `u`. 
       Expects `u` to be an original vertex value, requiring a search to get the 
       internal representation of the vertex `u` which is equivalent to the index 
-      of where `u` appears in `this.vertexMapper`.
+      of where `u` appears in `this.vertexMapper`. Parameters `ensureLocal` and 
+      `loc` deal with ensuring the local neighborhoods will be returned when
+      a neighborhood list is split up.
     */
+    pragma "no copy return"
     proc neighbors(u:int, param ensureLocal:bool=false, loc:locale=here) {
       var (_,ui) = binarySearch(this.vertexMapper, u);
 
@@ -105,11 +109,11 @@ module EdgeCentricGraph {
       Similar to method `neighbors` but instead returns the neighbors of `ui`
       assuming that `ui` is the internal representation of a vertex `u`.
     */
+    pragma "no copy return"
     proc neighborsInternal(ui:int, 
                            param ensureLocal:bool=false, loc:locale=here) {
       if !ensureLocal then {
-        const ref neighborhood = this.dst[this.seg[ui]..<this.seg[ui+1]];
-        return neighborhood;
+        return this.dst[this.seg[ui]..<this.seg[ui+1]];
       } else {
         var adjListStart = this.seg[ui];
         var adjListEnd = this.seg[ui+1];
@@ -117,8 +121,7 @@ module EdgeCentricGraph {
         var srcHi = this.src.localSubdomain(loc).high;
         var actualStart = max(adjListStart, srcLo);
         var actualEnd = min(srcHi, adjListEnd);
-        const ref neighborhood = this.dst.localSlice(actualStart..actualEnd);
-        return neighborhood;
+        return this.dst.localSlice(actualStart..actualEnd);
       }
     }
   }

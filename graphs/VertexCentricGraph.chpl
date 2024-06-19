@@ -58,7 +58,7 @@ module VertexCentricGraph {
     */
     proc neighbors(u:int) const ref {
       var (_,ui) = binarySearch(this.vertexMapper, u);
-      return this.adjacencies[ui].neighbors;
+      return this.neighborsInternal(ui);
     }
 
     /* 
