@@ -3,6 +3,7 @@ use EdgeCentricGraph;
 use Random;
 use BlockDist;
 use Time;
+use BreadthFirstSearch;
 
 config var m = 1_000;
 config var n =   100;
@@ -30,4 +31,29 @@ writeln();
 for u in edgeGraphView.neighbors(0) do write(u, " ");
 writeln();
 for u in vertexGraphView.neighbors(0) do write(u, " ");
+writeln("\n");
+
+writeln(
+  && reduce 
+  (bfsNoAggregation(edgeGraphView, 1) == bfsNoAggregation(vertexGraphView, 1))
+);
+writeln(
+  && reduce (
+    bfsNoAggregation(edgeGraphView, 1, true)[0]
+    ==
+    bfsNoAggregation(vertexGraphView, 1, true)[0]
+  )
+);
 writeln();
+
+writeln(
+  && reduce 
+  (bfsAggregationEdge(edgeGraphView, 1) == bfsAggregationVertex(vertexGraphView, 1))
+);
+writeln(
+  && reduce (
+    bfsAggregationEdge(edgeGraphView, 1, true)[0]
+    ==
+    bfsAggregationVertex(vertexGraphView, 1, true)[0]
+  )
+);
