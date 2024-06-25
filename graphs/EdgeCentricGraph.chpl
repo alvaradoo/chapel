@@ -7,9 +7,9 @@
 module EdgeCentricGraph {
   use Utils;
   use BlockDist;
+  use List;
   use ReplicatedDist;
   use Search;
-  use MemDiagnostics;
 
   /*
     Stores into a replicated array the low, high, and locale identifier of
@@ -121,8 +121,20 @@ module EdgeCentricGraph {
         var srcHi = this.src.localSubdomain(loc).high;
         var actualStart = max(adjListStart, srcLo);
         var actualEnd = min(srcHi, adjListEnd);
-        return this.dst.localSlice(actualStart..actualEnd);
+        return this.dst.localSlice(actualStart..<actualEnd);
       }
+    }
+
+    /*
+      Finds the locale(s) that the neighborhood of `ui` lives on.
+    */
+    proc findLocs(ui:int) {
+      var locs = new list(locale);
+      for low2lc2high in this.edgeRangesPerLocale do
+        if (ui >= low2lc2high[0]) && (ui <= low2lc2high[2]) then 
+          locs.pushBack(low2lc2high[1]);
+      
+      return locs;
     }
   }
 }

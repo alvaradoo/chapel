@@ -68,5 +68,9 @@ module VertexCentricGraph {
     proc neighborsInternal(ui:int) const ref {
       return this.adjacencies[ui].neighbors;
     }
+
+    proc findLoc(ui:int) {
+      return adjacencies[ui].locale;
+    }
   }
 }
