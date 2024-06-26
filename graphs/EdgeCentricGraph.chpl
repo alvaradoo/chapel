@@ -23,7 +23,7 @@ module EdgeCentricGraph {
     // to. In general, this will be the whole locale space, and we deal with 
     // gaps in the array through the isEmpty() method for subdomains
     var D = {min reduce targetLocIds .. max reduce targetLocIds} 
-            dmapped replicatedDist();
+            dmapped new replicatedDist();
     var ranges: [D] (int,locale,int);
     
     // Write the local subdomain low value to the ranges array

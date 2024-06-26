@@ -5,7 +5,7 @@ module Aggregators {
   use AggregationPrimitives;
 
   // Declare our global frontier queues
-  var Dfrontier = {0..1} dmapped replicatedDist(); 
+  var Dfrontier = {0..1} dmapped new replicatedDist(); 
   var frontiers: [Dfrontier] list(int, parSafe=true);
   var frontiersIdx:int;
   
