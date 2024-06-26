@@ -9,6 +9,8 @@ module Utils {
   use BitOps;
   use List;
   use CopyAggregation;
+  use OS;
+  use IO;
 
   /* Pulled from Arkouda. Used as the comparator for arrays made of tuples. */
   record contrivedComparator {
@@ -443,5 +445,69 @@ module Utils {
       }
       return permutedVals;
     }
+  }
+
+  proc matrixMarketFileToArrays(path) throws {
+    try { var f = open(path, ioMode.r); f.close(); }
+    catch e:FileNotFoundError { writeln("Encountered FileNotFoundError."); }
+    catch e { writeln("Unknown error."); }
+
+    var commentHeader = "% ";
+    commentHeader = commentHeader.strip();
+    var f = open(path, ioMode.r);
+    var r = f.reader(locking=false);
+    var line, a, b, c: string;
+
+    // Parse the header information of matrix market files.
+    while r.readLine(line) {
+      if line[0] == commentHeader then continue;
+      else {
+        var temp = line.split();
+        a = temp[0]; 
+        b = temp[1];
+        c = temp[2];
+        break;
+      }
+    }
+    var rows = a:int;
+    var cols = b:int;
+    var entries = c:int;
+
+    var src = blockDist.createArray({0..<entries}, int);
+    var dst = blockDist.createArray({0..<entries}, int);
+    var wgt = blockDist.createArray({0..<entries}, real);
+
+    // Check to see if there will be three columns, if so the graph will be
+    // weighted.
+    r.readLine(line);
+    var temp = line.split();
+    var weighted = false;
+    var ind = 0; 
+    if temp.size != 3 {
+      src[ind] = temp[0]:int;
+      dst[ind] = temp[1]:int;
+    } else {
+      src[ind] = temp[0]:int;
+      dst[ind] = temp[1]:int;
+      wgt[ind] = temp[2]:real;
+      weighted = true;
+    }
+    ind += 1;
+
+    // Now, process the rest of the file.
+    while r.readLine(line) {
+      var temp = line.split();
+      if !weighted {
+        src[ind] = temp[0]:int;
+        dst[ind] = temp[1]:int;
+      } else {
+        src[ind] = temp[0]:int;
+        dst[ind] = temp[1]:int;
+        wgt[ind] = temp[2]:real;
+      }
+      ind += 1;
+    }
+
+    return (src, dst, wgt);
   }
 }

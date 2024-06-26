@@ -4,6 +4,7 @@ use Random;
 use BlockDist;
 use Time;
 use BreadthFirstSearch;
+use Utils;
 
 config var m = 1_000;
 config var n =   100;
@@ -57,3 +58,14 @@ writeln(
     bfsAggregationVertex(vertexGraphView, 1, true)[0]
   )
 );
+writeln();
+
+var (src, dst, wgt) = matrixMarketFileToArrays(
+  "/Users/alvaraol/Work/data/karate/karate.mtx");
+var karateEdgeView = new shared EdgeCentricGraph(src, dst);
+var karateVertexView = new shared VertexCentricGraph(karateEdgeView);
+
+writeln("bfs 1 = ", bfsAggregationEdge(karateEdgeView, 1));
+writeln("bfs 2 = ", bfsAggregationVertex(karateVertexView, 1));
+writeln("bfs 3 = ", bfsNoAggregation(karateEdgeView, 1));
+writeln("bfs 4 = ", bfsNoAggregation(karateVertexView, 1));
