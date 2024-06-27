@@ -510,4 +510,14 @@ module Utils {
 
     return (src, dst, wgt);
   }
+
+  proc gnp(n, m) {
+    var src = blockDist.createArray({0..<m}, int);
+    var dst = blockDist.createArray({0..<m}, int);
+
+    fillRandom(src, 0, n-1);
+    fillRandom(dst, 0, n-1);
+
+    return (src, dst);
+  }
 }
