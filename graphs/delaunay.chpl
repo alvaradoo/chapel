@@ -4,6 +4,7 @@ use CommDiagnostics;
 use IO.FormattedIO;
 use IO;
 
+use Graph;
 use VertexCentricGraph;
 use EdgeCentricGraph;
 use BreadthFirstSearch;
@@ -15,11 +16,11 @@ config const end = 24;
 config const trials = 10;
 config const measureComm = false;
 
-proc runBFS(method, graph, sources, runs) {
+proc runBFS(method, graph, sources, ref runs) {
   var timer:stopwatch;
   for i in 1..trials {
     timer.start();
-    var noAggBfsEdge = method(graph, sources[i]);
+    var noAggBfsEdge = method(graph:shared Graph, sources[i]);
     timer.stop();
     runs[i] = timer.elapsed();
     timer.reset();
@@ -75,21 +76,14 @@ proc main() {
     var sources:[1..trials] int;
     fillRandom(sources, edgeView.vertexMapper.first, edgeView.vertexMapper.last);
     
-    // for i in 1..trials {
-    //   timer.start();
-    //   var noAggBfsVertex = bfsNoAggregation(vertexView, sources[i]);
-    //   timer.stop();
-    //   runs[i] = timer.elapsed();
-    //   timer.reset();
-    // }
-    runBFS(bfsNoAggregation, edgeView, sources, runs);
+    runBFS(bfsNoAggregationVertex, vertexView, sources, runs);
     var bfsNoAggregationVertexTime = (+ reduce runs) / trials;
     writeln("bfsNoAggregation on vertex graph took: ", 
             bfsNoAggregationVertexTime, " secs");
     
     for i in 1..trials {
       timer.start();
-      var noAggBfsEdge = bfsNoAggregation(edgeView, sources[i]);
+      var noAggBfsEdge = bfsNoAggregationEdge(edgeView:shared Graph, sources[i]);
       timer.stop();
       runs[i] = timer.elapsed();
       timer.reset();
