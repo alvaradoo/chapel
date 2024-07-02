@@ -1,7 +1,9 @@
+use Graph;
 use VertexCentricGraph;
 use EdgeCentricGraph;
 use Random;
 use BlockDist;
+use BreadthFirstSearch;
 
 var srcDist = blockDist.createArray({0..10}, int);
 var dstDist = blockDist.createArray({0..10}, int);
@@ -51,7 +53,23 @@ writeln();
 
 writeln();
 for loc in Locales do on loc { writeln(edgeGraphDist.edgeRangesPerLocale); }
-writeln();
 
 writeln(edgeGraphDist.neighborsInternal(4, ensureLocal=true));
 writeln(edgeGraphDist.neighborsInternal(4, ensureLocal=false));
+writeln();
+
+for u in edgeGraph.neighbors(0) do write(u, " ");
+writeln();
+for u in vertexGraph.neighbors(0) do write(u, " ");
+writeln("\n");
+
+writeln(
+  && reduce 
+  (bfsNoAggregationEdge(edgeGraph:shared Graph, 1) == bfsNoAggregationVertex(vertexGraph:shared Graph, 1))
+);
+writeln();
+
+writeln(
+  && reduce 
+  (bfsAggregationEdge(edgeGraph, 1) == bfsAggregationVertex(vertexGraph, 1))
+);

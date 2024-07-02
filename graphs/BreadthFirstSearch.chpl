@@ -2,18 +2,32 @@ module BreadthFirstSearch {
   // Chapel modules.
   use List;
   use BlockDist;
+  use ReplicatedDist;
 
   // Package modules.
   use CopyAggregation;
   use Search;
 
   // Arachne modules.
+  use Graph;
   use EdgeCentricGraph;
   use VertexCentricGraph;
   use Aggregators;
 
-  proc bfsNoAggregation(graph, source, param returnMax:bool = false) {
-    var maxV:int = -1;
+  var placeholderReplicatedD = {0..1} dmapped new replicatedDist();
+  var placeHolderReplicatedA: [placeholderReplicatedD] (int,locale,int);
+  var placeHolderBlockA = blockDist.createArray({0..1}, int);
+  var placeHolderBlockAVertex = blockDist.createArray({0..1}, vertex);
+
+  proc bfsNoAggregationEdge(inGraph: shared Graph, source:int) {
+    var graph = try! inGraph:EdgeCentricGraph(
+      placeHolderBlockA.type,
+      placeHolderBlockA.type,
+      placeHolderBlockA.type,
+      placeHolderBlockA.type,
+      placeHolderReplicatedA.type
+    );
+
     var frontiers: [{0..1}] list(int, parSafe=true);
     frontiers[0] = new list(int, parSafe=true);
     frontiers[1] = new list(int, parSafe=true);
@@ -29,13 +43,12 @@ module BreadthFirstSearch {
 
     while true {
       var pendingWork:bool;
-      forall u in frontiers[frontiersIdx] with (|| reduce pendingWork, ref maxV) {
+      forall u in frontiers[frontiersIdx] with (|| reduce pendingWork) {
         for v in graph.neighborsInternal(u) {
           if depth[v] == -1 {
             pendingWork = true;
             depth[v] = currLevel + 1;
             frontiers[(frontiersIdx + 1) % 2].pushBack(v);
-            if returnMax then maxV = v;
           }
         }
       }
@@ -44,12 +57,48 @@ module BreadthFirstSearch {
       currLevel += 1;
       frontiersIdx = (frontiersIdx + 1) % 2;
     }
-    if returnMax then return (depth, maxV);
-    else return depth;
+    return depth;
   }
 
-  proc bfsAggregationEdge(graph: shared EdgeCentricGraph(?), source, 
-                      param returnMax:bool = false) {
+  proc bfsNoAggregationVertex(inGraph: shared Graph, source:int) {
+    var graph = try! inGraph:VertexCentricGraph(
+      placeHolderBlockAVertex.type,
+      placeHolderBlockA.type
+    );
+
+    var frontiers: [{0..1}] list(int, parSafe=true);
+    frontiers[0] = new list(int, parSafe=true);
+    frontiers[1] = new list(int, parSafe=true);
+
+    var frontiersIdx = 0; 
+    var currLevel = 0;
+    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+    frontiers[frontiersIdx].pushBack(internalSource);
+
+    var depth = blockDist.createArray(graph.vertexMapper.domain, int);
+    depth = -1;
+    depth[internalSource] = currLevel;
+
+    while true {
+      var pendingWork:bool;
+      forall u in frontiers[frontiersIdx] with (|| reduce pendingWork) {
+        for v in graph.neighborsInternal(u) {
+          if depth[v] == -1 {
+            pendingWork = true;
+            depth[v] = currLevel + 1;
+            frontiers[(frontiersIdx + 1) % 2].pushBack(v);
+          }
+        }
+      }
+      frontiers[frontiersIdx].clear();
+      if !pendingWork then break;
+      currLevel += 1;
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    return depth;
+  }
+
+  proc bfsAggregationEdge(graph: shared EdgeCentricGraph(?), source) {
     coforall loc in Locales with(ref frontiers) do on loc {
       frontiers[0] = new list(int, parSafe=true);
       frontiers[1] = new list(int, parSafe=true);
@@ -62,43 +111,36 @@ module BreadthFirstSearch {
     }
     var currLevel = 0; 
     var depth = blockDist.createArray(graph.vertexMapper.domain, int);
-    var maxV:int = -1;
     depth = -1;
     depth[internalSource] = currLevel;
 
     while true {
       var pendingWork:bool;
-      coforall loc in Locales 
-      with (|| reduce pendingWork, ref depth, ref frontiers, ref maxV) {
-        on loc {
-          forall u in frontiers[frontiersIdx] 
-          with (|| reduce pendingWork, 
-                var frontierAgg = new listDstAggregator(int),
-                ref maxV)
-          {
-            for v in graph.neighborsInternal(u, ensureLocal=true) {
-              if depth[v] == -1 {
-                pendingWork = true;
-                depth[v] = currLevel + 1; 
-                var locs = graph.findLocs(v);
-                for lc in locs do frontierAgg.copy(lc.id, v);
-                if returnMax then maxV = v;
-              }
+      coforall loc in Locales
+      with (|| reduce pendingWork, ref depth, ref frontiers)
+      do on loc {
+        forall u in frontiers[frontiersIdx] 
+        with (|| reduce pendingWork, var frontierAgg=new listDstAggregator(int))
+        {
+          for v in graph.neighborsInternal(u, ensureLocal=true) {
+            if depth[v] == -1 {
+              pendingWork = true;
+              depth[v] = currLevel + 1; 
+              var locs = graph.findLocs(v);
+              for lc in locs do frontierAgg.copy(lc.id, v);
             }
           }
-          frontiers[frontiersIdx].clear();
         }
+        frontiers[frontiersIdx].clear();
       }
       if !pendingWork then break;
       currLevel += 1;
       frontiersIdx = (frontiersIdx + 1) % 2;
     }
-    if returnMax then return (depth, maxV);
-    else return depth;
+    return depth;
   }
 
-  proc bfsAggregationVertex(graph: shared VertexCentricGraph(?), source, 
-                            param returnMax:bool = false) {
+  proc bfsAggregationVertex(graph: shared VertexCentricGraph(?), source) {
     coforall loc in Locales with(ref frontiers) do on loc {
       frontiers[0] = new list(int, parSafe=true);
       frontiers[1] = new list(int, parSafe=true);
@@ -111,25 +153,22 @@ module BreadthFirstSearch {
     }
     var currLevel = 0; 
     var depth = blockDist.createArray(graph.vertexMapper.domain, int);
-    var maxV:int = -1;
     depth = -1;
     depth[internalSource] = currLevel;
 
     while true {
       var pendingWork:bool;
       coforall loc in Locales 
-      with (|| reduce pendingWork, ref depth, ref frontiers, ref maxV) 
+      with (|| reduce pendingWork, ref depth, ref frontiers) 
       do on loc {
         forall u in frontiers[frontiersIdx] 
-        with (|| reduce pendingWork, var frontierAgg=new listDstAggregator(int),
-              ref maxV) 
+        with (|| reduce pendingWork, var frontierAgg=new listDstAggregator(int)) 
         {
           for v in graph.neighborsInternal(u) {
             if depth[v] == -1 {
               pendingWork = true;
               depth[v] = currLevel + 1; 
               frontierAgg.copy(graph.findLoc(v).id, v);
-              if returnMax then maxV = v;
             }
           }
         }
@@ -139,7 +178,6 @@ module BreadthFirstSearch {
       currLevel += 1;
       frontiersIdx = (frontiersIdx + 1) % 2;
     }
-    if returnMax then return (depth, maxV);
-    else return depth;
+    return depth;
   }
 }

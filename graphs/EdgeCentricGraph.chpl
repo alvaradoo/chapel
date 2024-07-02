@@ -10,6 +10,7 @@ module EdgeCentricGraph {
   use List;
   use ReplicatedDist;
   use Search;
+  use Graph;
 
   /*
     Stores into a replicated array the low, high, and locale identifier of
@@ -46,7 +47,7 @@ module EdgeCentricGraph {
   /*
     Class that represents a graph in an edge-centric manner. 
   */
-  class EdgeCentricGraph {
+  class EdgeCentricGraph : Graph {
     var src;
     var dst;
     var seg;
@@ -58,6 +59,7 @@ module EdgeCentricGraph {
       vertices of a graph, initialize an `EdgeCentricGraph` object.
     */
     proc init(src: [?sD] int, dst: [?dD] int) {
+      super.init("EdgeCentricGraph");
       var (symmSrc, symmDst) = symmetrizeEdgeList(src, dst);
       var (sortedSymmSrc, sortedSymmDst) = sortEdgeList(symmSrc, symmDst);
       var (looplessSortedSymmSrc, looplessSortedSymmDst) = removeSelfLoops(

@@ -8,6 +8,7 @@ module VertexCentricGraph {
   use BlockDist;
   use EdgeCentricGraph;
   use Search;
+  use Graph;
 
   /*
     Record representing the vertex of a graph. It is used within the class
@@ -27,7 +28,7 @@ module VertexCentricGraph {
   /*
     Class that represents a graph in a vertex-centric manner.
   */
-  class VertexCentricGraph {
+  class VertexCentricGraph : Graph {
     var adjacencies;
     var vertexMapper;
 
@@ -36,6 +37,7 @@ module VertexCentricGraph {
       `VertexCentricGraph` object.
     */
     proc init(graph: shared EdgeCentricGraph(?)) {
+      super.init("VertexCentricGraph");
       var adjacencies = blockDist.createArray(
         {0..<graph.vertexMapper.size}, vertex
       );
