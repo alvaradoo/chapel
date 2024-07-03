@@ -65,11 +65,11 @@ writeln("\n");
 
 writeln(
   && reduce 
-  (bfsNoAggregationEdge(edgeGraph:shared Graph, 1) == bfsNoAggregationVertex(vertexGraph:shared Graph, 1))
+  (bfsNoAggregationEdge(toGraph(edgeGraph), 1) == bfsNoAggregationVertex(toGraph(vertexGraph), 1))
 );
 writeln();
 
 writeln(
   && reduce 
-  (bfsAggregationEdge(edgeGraph, 1) == bfsAggregationVertex(vertexGraph, 1))
+  (bfsAggregationEdge(toGraph(edgeGraph), 1) == bfsAggregationVertex(toGraph(vertexGraph), 1))
 );
