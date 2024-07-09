@@ -20,7 +20,7 @@ proc runBFS(method, graph, sources, ref runs) {
   var timer:stopwatch;
   for i in 1..trials {
     timer.start();
-    var noAggBfsEdge = method(graph:shared Graph, sources[i]);
+    var res = method(graph:shared Graph, sources[i]);
     timer.stop();
     runs[i] = timer.elapsed();
     timer.reset();

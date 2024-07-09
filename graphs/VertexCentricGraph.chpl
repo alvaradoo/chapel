@@ -31,6 +31,7 @@ module VertexCentricGraph {
   class VertexCentricGraph : Graph {
     var adjacencies;
     var vertexMapper;
+    var numEdges;
 
     /*
       Using an existing `EdgeCentricGraph` object, initialize a 
@@ -50,6 +51,11 @@ module VertexCentricGraph {
       forall l in adjacencies do l.sortNeighbors();
       this.adjacencies = adjacencies;
       this.vertexMapper = graph.vertexMapper;
+
+      var numEdges = 0;
+      forall u in this.adjacencies with (+ reduce numEdges) do 
+        numEdges += u.neighbors.size;
+      this.numEdges = numEdges;
     }
 
     /*

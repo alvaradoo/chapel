@@ -73,3 +73,9 @@ writeln(
   && reduce 
   (bfsAggregationEdge(toGraph(edgeGraph), 1) == bfsAggregationVertex(toGraph(vertexGraph), 1))
 );
+writeln();
+
+writeln(
+  && reduce 
+  (bfsNoAggregationVertexHybrid(toGraph(vertexGraph), 1, 14, 24) == bfsNoAggregationVertex(toGraph(vertexGraph), 1))
+);

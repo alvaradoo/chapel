@@ -27,7 +27,8 @@ module Graph {
   proc toVertexCentricGraph(inGraph:Graph) {
     return try! inGraph:shared VertexCentricGraph(
       placeHolderBlockAVertex.type,
-      placeHolderBlockA.type
+      placeHolderBlockA.type,
+      int
     );
   }
 

@@ -1,6 +1,7 @@
 module BreadthFirstSearch {
   // Chapel modules.
   use List;
+  use Set;
   use BlockDist;
   use ReplicatedDist;
 
@@ -164,6 +165,134 @@ module BreadthFirstSearch {
         }
         frontiers[frontiersIdx].clear();
       }
+      if !pendingWork then break;
+      currLevel += 1;
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    return depth;
+  }
+
+  proc topDownFine(ref currentFrontier, ref nextFrontier, ref depth, 
+                   inGraph: shared Graph, currLevel:int): bool {
+    var graph = toVertexCentricGraph(inGraph);
+    var pendingWork:bool;
+    forall u in currentFrontier with (|| reduce pendingWork, ref nextFrontier) {
+      for v in graph.neighborsInternal(u) {
+        if depth[v] == -1 {
+          pendingWork = true;
+          depth[v] = currLevel + 1;
+          nextFrontier.add(v);
+        }
+      }
+    }
+    return pendingWork;
+  }
+
+  proc bottomUpFine(ref currentFrontier, ref nextFrontier, ref depth, 
+                   inGraph: shared Graph, currLevel:int): bool {
+    var graph = toVertexCentricGraph(inGraph);
+    var pendingWork:bool;
+    forall v in graph.vertexMapper.domain with (|| reduce pendingWork, ref nextFrontier) {
+      if depth[v] == -1 {
+        for u in graph.neighborsInternal(v) {
+          if currentFrontier[u] {
+            pendingWork = true;
+            depth[v] = currLevel + 1;
+            nextFrontier[v] = true;
+          }
+        }
+      }
+    }
+    return pendingWork;
+  }
+
+  proc testAndSwitch(inGraph: shared Graph, ref currentFrontier, param ftype,
+                     alpha:real, beta:real) {
+    var graph = toVertexCentricGraph(inGraph);
+    var mf, mu, nf, n: int;
+
+    nf = currentFrontier.size;
+    n = graph.vertexMapper.size;
+
+    if ftype == "top" {
+      forall v in currentFrontier with (+ reduce mf) do
+        mf += graph.adjacencies[v].neighbors.size;
+    }
+    else {
+      forall (i,v) in zip(currentFrontier.domain, currentFrontier) with (+ reduce mf) do
+        if v then mf += graph.adjacencies[i].neighbors.size;
+    }
+
+    mu = graph.numEdges - mf;
+
+    if mf > (mu / alpha) then return 0;
+    else if nf < (n / beta) then return 1;
+    else return -1;
+  }
+
+  /*
+    Experimental breadth-first search version that requires the frontiers to be
+    sets to enable a hybrid neighborhood expansion mechanism swapping between
+    top-down and bottom-up neighborhood expansion as needed.
+  */
+  proc bfsNoAggregationVertexHybrid(inGraph: shared Graph, source:int, 
+                                    alpha, beta) {
+    var graph = toVertexCentricGraph(inGraph);
+    var placeholder = blockDist.createArray(graph.vertexMapper.domain, bool);
+
+    var frontiers: [{0..1}] set(int, parSafe=true);
+    frontiers[0] = new set(int, parSafe=true);
+    frontiers[1] = new set(int, parSafe=true);
+
+    var frontiersB: [{0..1}] placeholder.type;
+    frontiersB[0] = blockDist.createArray(graph.vertexMapper.domain, bool);
+    frontiersB[1] = blockDist.createArray(graph.vertexMapper.domain, bool);
+
+    var frontiersIdx = 0; 
+    var currLevel = 0;
+    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+    frontiers[frontiersIdx].add(internalSource);
+
+    var depth = blockDist.createArray(graph.vertexMapper.domain, int);
+    depth = -1;
+    depth[internalSource] = currLevel;
+    var neighborhoodExpansionType = 1;
+
+    while true {
+      var pendingWork:bool;
+      if neighborhoodExpansionType == 0 {
+        // change to bit map
+        forall v in frontiers[frontiersIdx] do 
+          frontiersB[frontiersIdx][v] = true;
+
+        pendingWork = bottomUpFine(frontiersB[frontiersIdx], 
+                                   frontiersB[(frontiersIdx + 1) % 2],
+                                   depth, inGraph, currLevel
+                                  );
+
+        frontiersB[frontiersIdx] = false;
+        neighborhoodExpansionType = testAndSwitch(inGraph, 
+                                                  frontiersB[(frontiersIdx + 1) % 2], "bottom",
+                                                  alpha, beta);
+      }
+      else if neighborhoodExpansionType == 1 {
+        // change to set
+        forall v in frontiersB[frontiersIdx] do 
+          frontiers[frontiersIdx].add(v);
+
+        pendingWork = topDownFine(frontiers[frontiersIdx], 
+                                  frontiers[(frontiersIdx + 1) % 2],
+                                  depth, inGraph, currLevel
+                                );
+        
+        frontiers[frontiersIdx].clear();
+        neighborhoodExpansionType = testAndSwitch(inGraph, 
+                                                  frontiers[(frontiersIdx + 1) % 2], "top",
+                                                  alpha, beta);
+      }
+      else {
+        break;
+      }      
       if !pendingWork then break;
       currLevel += 1;
       frontiersIdx = (frontiersIdx + 1) % 2;
