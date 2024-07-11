@@ -8,21 +8,20 @@ module Generator {
   use Random;
   use BlockDist;
   use EdgeCentricGraph;
-  
-  proc assignQuadrant(u:real, a:real, b:real, c:real, d:real, bit:int):(int,int)
-  {
-    var start, end, doNothing = 0;
 
-    if u <= a then doNothing += 1;
-    else if u <= a+b then end = 1;
-    else if u <= a+b+c then start = 1;
+  proc assignQuadrant(iiBit:bool, jjBit:bool, bit:int):(int,int) {
+    var start, end, doNothing = 0; 
+
+    if !iiBit && !jjBit then doNothing += 1;
+    else if iiBit && !jjBit then start += 1; 
+    else if !iiBit && jjBit then end += 1; 
     else { start = 1; end = 1; }
 
     return (bit*start, bit*end);
   }
 
   proc genRMATgraph(a:real, b:real, c:real, d:real, SCALE:int, nVERTICES:int,
-                    nEDGES:int, maxEweight:int, genNoise:bool = false) {
+                    nEDGES:int, maxEweight:int, SSCA2Noise:bool = false) {
     const vRange = 1..nVERTICES,
           eRange = 1..nEDGES,
           rRange = 1..nEDGES+1;
@@ -32,7 +31,6 @@ module Generator {
     var A = blockDist.createArray({eRange}, real),
         B = blockDist.createArray({eRange}, real),
         C = blockDist.createArray({eRange}, real),
-        D = blockDist.createArray({eRange}, real),
         norm = blockDist.createArray({eRange}, real),
         unifRandom = blockDist.createArray({eRange}, real),
         edges = blockDist.createArray({eRange}, (int,int));
@@ -41,33 +39,22 @@ module Generator {
     var bit = 1 << SCALE;
     var skip:real;
 
-    (A, B, C, D) = (a, b, c, d);
+    (A, B, C) = (a, b, c);
     for d in 1..SCALE {
       bit >>= 1;
-      writeln("$$$$$ EXECUTING GENERATION FOR SCALE ", d, " WITH BIT ", bit, "...");
-      if genNoise {
-        skip = randGen.next();
-        randGen.fill(unifRandom);
-        A = a * (0.95 + 0.1 * unifRandom);
+      writeln("$$$$$ EXECUTING GENERATOR FOR SCALE ",d," WITH BIT ",bit, "...");
+      var cNorm = C / (1 - (A + B));
+      var aNorm = A / (A + B);
 
-        skip = randGen.next();
-        randGen.fill(unifRandom);
-        B = b * (0.95 + 0.1 * unifRandom);
-
-        skip = randGen.next();
-        randGen.fill(unifRandom);
-        C = c * (0.95 + 0.1 * unifRandom);
-
-        skip = randGen.next();
-        randGen.fill(unifRandom);
-        D = d * (0.95 + 0.1 * unifRandom);
-
-        norm = 1.0 / (A + B + C + D);
-        A *= norm; B *= norm; C *= norm; D *= norm;
-      }
       skip = randGen.next();
       randGen.fill(unifRandom);
-      edges += assignQuadrant(unifRandom, A, B, C, D, bit);
+      var iiBit = unifRandom > (A + B);
+
+      skip = randGen.next();
+      randGen.fill(unifRandom);
+      var jjBit = unifRandom > (cNorm * iiBit:real + aNorm * (!iiBit):real);
+      
+      edges += assignQuadrant(iiBit, jjBit, bit);
     }
 
     var permutation = blockDist.createArray({vRange}, int);
@@ -90,8 +77,8 @@ module Generator {
       edges[e][1] = permutation[edges[e][1]];
     }
 
-    var src = blockDist.createArray({eRange}, int);
-    var dst = blockDist.createArray({eRange}, int);
+    var src = blockDist.createArray({0..<nEDGES}, int);
+    var dst = blockDist.createArray({0..<nEDGES}, int);
 
     forall (e,s,d) in zip(edges,src,dst) { (s,d) = e; }
 
