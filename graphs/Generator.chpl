@@ -10,9 +10,9 @@ module Generator {
   use EdgeCentricGraph;
 
   proc assignQuadrant(iiBit:bool, jjBit:bool, bit:int):(int,int) {
-    var start, end, doNothing = 0; 
+    var start, end:int = 0; 
 
-    if !iiBit && !jjBit then doNothing += 1;
+    if !iiBit && !jjBit then; //do nothing;
     else if iiBit && !jjBit then start += 1; 
     else if !iiBit && jjBit then end += 1; 
     else { start = 1; end = 1; }
@@ -23,8 +23,7 @@ module Generator {
   proc genRMATgraph(a:real, b:real, c:real, d:real, SCALE:int, nVERTICES:int,
                     nEDGES:int, maxEweight:int, SSCA2Noise:bool = false) {
     const vRange = 1..nVERTICES,
-          eRange = 1..nEDGES,
-          rRange = 1..nEDGES+1;
+          eRange = 1..nEDGES;
 
     var randGen = new randomStream(real);
 
@@ -35,14 +34,10 @@ module Generator {
         unifRandom = blockDist.createArray({eRange}, real),
         edges = blockDist.createArray({eRange}, (int,int));
 
-    edges = (1,1);
-    var bit = 1 << SCALE;
-    var skip:real;
-
     (A, B, C) = (a, b, c);
-    for d in 1..SCALE {
-      bit >>= 1;
-      writeln("$$$$$ EXECUTING GENERATOR FOR SCALE ",d," WITH BIT ",bit, "...");
+    edges = (1,1);
+    var skip:real;
+    for s in 1..SCALE {
       var cNorm = C / (1 - (A + B));
       var aNorm = A / (A + B);
 
@@ -54,27 +49,26 @@ module Generator {
       randGen.fill(unifRandom);
       var jjBit = unifRandom > (cNorm * iiBit:real + aNorm * (!iiBit):real);
       
-      edges += assignQuadrant(iiBit, jjBit, bit);
+      edges += assignQuadrant(iiBit, jjBit, 2**(s-1));
     }
 
-    var permutation = blockDist.createArray({vRange}, int);
-    permutation = vRange;
+    var permutation = blockDist.createArray({vRange}, atomic int);
+    forall (p,i) in zip(permutation,permutation.domain) do p.write(i); 
     
     var eWeights = blockDist.createArray({eRange}, int);
     randGen.fill(unifRandom);
     eWeights = floor(1 + unifRandom * maxEweight):int;
     randGen.fill(unifRandom[vRange]);
 
-    for v in vRange { // can be forall?
-      // loop will NOT be distributed.
+    forall v in permutation.domain {
       var newID = floor(1 + unifRandom[v] * nVERTICES):int;
-      permutation[v] <=> permutation [newID];
+      var replacedVal = permutation[v].exchange(permutation[newID].read());
+      permutation[newID].write(replacedVal);
     }
 
-    for e in eRange { // can be forall?
-      // loop will NOT be distributed.
-      edges[e][0] = permutation[edges[e][0]];
-      edges[e][1] = permutation[edges[e][1]];
+    forall e in edges.domain {
+      edges[e][0] = permutation[edges[e][0]].read();
+      edges[e][1] = permutation[edges[e][1]].read();
     }
 
     var src = blockDist.createArray({0..<nEDGES}, int);

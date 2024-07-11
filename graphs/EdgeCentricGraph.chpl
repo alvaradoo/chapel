@@ -11,6 +11,7 @@ module EdgeCentricGraph {
   use ReplicatedDist;
   use Search;
   use Graph;
+  use Map;
 
   /*
     Stores into a replicated array the low, high, and locale identifier of
@@ -137,6 +138,27 @@ module EdgeCentricGraph {
           locs.pushBack(low2lc2high[1]);
       
       return locs;
+    }
+
+    /* 
+      Returns two arrays: one with degree values and the other with how many
+      vertices have that degree.
+    */
+    proc degreeHistogram(print:bool = false) {
+      var degrees = blockDist.createArray(this.vertexMapper.domain, int);
+      forall d in this.seg.domain do
+        if d != 0 then degrees[d-1] = this.seg[d] - this.seg[d-1];
+
+      var maxDegree = max reduce degrees;
+      var degreeVals = blockDist.createArray({0..maxDegree}, int);
+      degreeVals = 0..maxDegree;
+      var degreeSum = blockDist.createArray({0..maxDegree}, atomic int);
+      var degreeSumNotAtomic = blockDist.createArray({0..maxDegree}, int);
+      forall dsum in degreeSum do dsum.write(0);
+      forall d in degrees do degreeSum[d].add(1);
+      forall (ds, dsa) in zip(degreeSum, degreeSumNotAtomic) do dsa = ds.read();
+
+      return (degreeVals, degreeSumNotAtomic);
     }
   }
 }

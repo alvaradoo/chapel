@@ -13,3 +13,11 @@ const nVERTICES = 2**SCALE;
 var G = genRMATgraph(a,b,c,d,SCALE,nVERTICES,nVERTICES*eFACTOR,maxEweight);
 writeln("Expected edges = ", nVERTICES * eFACTOR);
 writeln("Actual edges   = ", G.src.size/2);
+writeln();
+
+var (vals, sums) = G.degreeHistogram(true);
+writeln("Max degree    = ", vals.last);
+writeln("Vals with max = ", sums.last);
+
+writeln("vals = ", vals);
+writeln("sums = ", sums);
