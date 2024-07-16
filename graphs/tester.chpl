@@ -79,3 +79,27 @@ writeln(
   && reduce 
   (bfsNoAggregationVertexHybrid(toGraph(vertexGraph), 1, 14, 24) == bfsNoAggregationVertex(toGraph(vertexGraph), 1))
 );
+writeln();
+
+writeln(
+  && reduce 
+  (bfsLevelVertexAgg(toGraph(vertexGraph), 1) == bfsAggregationVertex(toGraph(vertexGraph), 1))
+);
+writeln();
+
+writeln(
+  && reduce 
+  (bfsLevelVertex(toGraph(vertexGraph), 1) == bfsAggregationVertex(toGraph(vertexGraph), 1))
+);
+writeln();
+
+writeln(
+  && reduce 
+  (bfsLevelEdgeAgg(toGraph(edgeGraph), 1) == bfsAggregationVertex(toGraph(vertexGraph), 1))
+);
+writeln();
+
+writeln(
+  && reduce 
+  (bfsLevelEdge(toGraph(edgeGraph), 1) == bfsAggregationVertex(toGraph(vertexGraph), 1))
+);

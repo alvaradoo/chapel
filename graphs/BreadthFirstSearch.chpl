@@ -15,6 +15,156 @@ module BreadthFirstSearch {
   use VertexCentricGraph;
   use Aggregators;
 
+  proc bfsLevelVertexAgg(inGraph: shared Graph, source:int) {
+    var graph = toVertexCentricGraph(inGraph);
+
+    coforall loc in Locales with(ref frontiers) do on loc {
+      frontiers[0] = new list(int, parSafe=true);
+      frontiers[1] = new list(int, parSafe=true);
+    }
+    frontiersIdx = 0;
+    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+
+    on graph.findLoc(internalSource) {
+      frontiers[frontiersIdx].pushBack(internalSource);
+    }
+    var currLevel = 0; 
+    var level = blockDist.createArray(graph.vertexMapper.domain, int);
+    level = -1;
+
+    while true {
+      var pendingWork:bool;
+      coforall loc in Locales 
+      with (|| reduce pendingWork, ref level, ref frontiers) 
+      do on loc {
+        forall u in frontiers[frontiersIdx] 
+        with (|| reduce pendingWork, var frontierAgg=new listDstAggregator(int)) 
+        {
+          if level[u] == -1 {
+            level[u] = currLevel;
+            for v in graph.neighborsInternal(u) do 
+              frontierAgg.copy(graph.findLoc(v).id, v);
+            pendingWork = true;
+          }
+        }
+        frontiers[frontiersIdx].clear();
+      }
+      if !pendingWork then break;
+      currLevel += 1;
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    return level;
+  }
+
+  proc bfsLevelVertex(inGraph: shared Graph, source:int) {
+    var graph = toVertexCentricGraph(inGraph);
+
+    var frontiers: [{0..1}] list(int, parSafe=true);
+    frontiers[0] = new list(int, parSafe=true);
+    frontiers[1] = new list(int, parSafe=true);
+
+    frontiersIdx = 0;
+    var currLevel = 0; 
+    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+    frontiers[frontiersIdx].pushBack(internalSource);
+    
+    var level = blockDist.createArray(graph.vertexMapper.domain, int);
+    level = -1;
+
+    while true {
+      var pendingWork:bool;
+      forall u in frontiers[frontiersIdx] with (|| reduce pendingWork) {
+        if level[u] == -1 {
+          level[u] = currLevel;
+          for v in graph.neighborsInternal(u) do 
+            frontiers[(frontiersIdx + 1) % 2].pushBack(v);
+          pendingWork = true;
+        }
+      }
+      frontiers[frontiersIdx].clear();
+      if !pendingWork then break;
+      currLevel += 1;
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    return level;
+  }
+
+  proc bfsLevelEdgeAgg(inGraph: shared Graph, source:int) {
+    var graph = toEdgeCentricGraph(inGraph);
+
+    coforall loc in Locales with(ref frontiers) do on loc {
+      frontiers[0] = new list(int, parSafe=true);
+      frontiers[1] = new list(int, parSafe=true);
+    }
+    frontiersIdx = 0;
+    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+
+    for lc in graph.findLocs(internalSource) {
+      on lc do frontiers[frontiersIdx].pushBack(internalSource);
+    }
+    var currLevel = 0; 
+    var level = blockDist.createArray(graph.vertexMapper.domain, int);
+    level = -1;
+
+    while true {
+      var pendingWork:bool;
+      coforall loc in Locales 
+      with (|| reduce pendingWork, ref level, ref frontiers) 
+      do on loc {
+        forall u in frontiers[frontiersIdx] 
+        with (|| reduce pendingWork, var frontierAgg=new listDstAggregator(int)) 
+        {
+          if level[u] == -1 {
+            level[u] = currLevel;
+            for v in graph.neighborsInternal(u) {
+              var locs = graph.findLocs(v);
+              for lc in locs do frontierAgg.copy(lc.id, v);
+            }
+            pendingWork = true;
+          }
+        }
+        frontiers[frontiersIdx].clear();
+      }
+      if !pendingWork then break;
+      currLevel += 1;
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    return level;
+  }
+
+  proc bfsLevelEdge(inGraph: shared Graph, source:int) {
+    var graph = toEdgeCentricGraph(inGraph);
+
+    var frontiers: [{0..1}] list(int, parSafe=true);
+    frontiers[0] = new list(int, parSafe=true);
+    frontiers[1] = new list(int, parSafe=true);
+
+    frontiersIdx = 0;
+    var currLevel = 0; 
+    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+    frontiers[frontiersIdx].pushBack(internalSource);
+    
+    var level = blockDist.createArray(graph.vertexMapper.domain, int);
+    level = -1;
+
+    while true {
+      var pendingWork:bool;
+      forall u in frontiers[frontiersIdx] with (|| reduce pendingWork) {
+        if level[u] == -1 {
+          level[u] = currLevel;
+          for v in graph.neighborsInternal(u) do 
+            frontiers[(frontiersIdx + 1) % 2].pushBack(v);
+          pendingWork = true;
+        }
+      }
+      frontiers[frontiersIdx].clear();
+      if !pendingWork then break;
+      currLevel += 1;
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    return level;
+  }
+
   proc bfsNoAggregationVertex(inGraph: shared Graph, source:int) {
     var graph = toVertexCentricGraph(inGraph);
 
@@ -95,7 +245,7 @@ module BreadthFirstSearch {
     frontiersIdx = 0;
     var internalSource = binarySearch(graph.vertexMapper, source)[1];
 
-    on graph.findLoc(internalSource) do {
+    on graph.findLoc(internalSource) {
       frontiers[frontiersIdx].pushBack(internalSource);
     }
     var currLevel = 0; 

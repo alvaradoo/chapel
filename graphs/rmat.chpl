@@ -5,14 +5,14 @@ use IO.FormattedIO;
 use IO;
 
 use Graph;
+use Generator;
 use VertexCentricGraph;
 use EdgeCentricGraph;
 use BreadthFirstSearch;
 use Utils;
 
-config const dir = "/lus/scratch/alvaraol/data/synthetic/delaunay/";
-config const start = 10;
-config const end = 24;
+config const scaleStart = 10;
+config const scaleEnd = 12;
 config const trials = 10;
 config const measureComms = false;
 
@@ -30,42 +30,32 @@ proc runBFS(method, graph, sources, ref runs) {
 
 proc main() {
   var now = dateTime.now();
-  var outputFilename = "bfs_" + numLocales:string + "L_delaunay_n" + start:string 
-                     + "-" + end:string + "_" + now:string + ".csv";
+  var outputFilename = "bfs_" + numLocales:string + "L_rmat_" + scaleStart:string 
+                     + "-" + scaleEnd:string + "_" + now:string + ".csv";
   var outputFile = open(outputFilename, ioMode.cw);
   var outputFileWriter = outputFile.writer(locking=false);
-  var header = "filename,parsing,edgeProcessing,e2v,bfsV,bfsE,bfsVagg,bfsEagg";
+  var header = "scale,edgeProcessing,e2v,bfsV,bfsE,bfsVagg,bfsEagg";
   outputFileWriter.writeln(header);
 
-  for val in start..end {
+  for val in scaleStart..scaleEnd {
     var timer:stopwatch;
-    var folder = "delaunay_n" + val:string + "/";
-    var file = "delaunay_n" + val:string;
-    var ext = ".mtx";
+    var SCALE = val;
+    var ns = 2**SCALE;
+    var ms = 2**SCALE * 16;
+    var file = "rmat_" + SCALE:string;
     
     writeln("$"*25);
-    writeln("RESULTS FOR ", file.toUpper(), ": ");
+    writeln("RESULTS FOR RMAT ", SCALE:string, ": ");
 
     timer.start(); if measureComms then startCommDiagnostics();
-    var (src, dst, wgt) = matrixMarketFileToArrays(dir+folder+file+ext);
-    timer.stop(); if measureComms then stopCommDiagnostics();
-    var fileReadingTime = timer.elapsed();
-    if measureComms { 
-      commDiagnosticsToCsv(getCommDiagnostics(), file, "parsing");
-      resetCommDiagnostics();
-    }
-    writeln("Extracting arrays took: ", fileReadingTime, " secs");
-    timer.reset();
-
-    timer.start(); if measureComms then startCommDiagnostics();
-    var edgeView = new shared EdgeCentricGraph(src, dst);
+    var edgeView = genRMATgraph(0.57,0.19,0.19,0.05,SCALE,ns,ms,2);
     timer.stop(); if measureComms then stopCommDiagnostics();
     var edgeProcessing = timer.elapsed();
     if measureComms { 
       commDiagnosticsToCsv(getCommDiagnostics(), file, "processing");
       resetCommDiagnostics();
     }
-    writeln("Creating edge graph took: ", edgeProcessing, " secs");
+    writeln("Creating RMAT graph took: ", edgeProcessing, " secs");
     timer.reset();
 
     timer.start(); if measureComms then startCommDiagnostics();
@@ -133,7 +123,7 @@ proc main() {
 
     writeln();
     var line = "%s,%.4dr,%.4dr,%.4dr,%.4dr,%.4dr,%.4dr,%.4dr".format(
-      file,fileReadingTime,edgeProcessing,edgeToVertex,bfsNoAggregationVertexTime,
+      SCALE,edgeProcessing,edgeToVertex,bfsNoAggregationVertexTime,
       bfsNoAggregationEdgeTime,bfsAggregationVertexTime,bfsAggregationEdgeTime
     );
     outputFileWriter.writeln(line);

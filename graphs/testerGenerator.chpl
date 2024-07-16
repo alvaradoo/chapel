@@ -18,6 +18,3 @@ writeln();
 var (vals, sums) = G.degreeHistogram(true);
 writeln("Max degree    = ", vals.last);
 writeln("Vals with max = ", sums.last);
-
-writeln("vals = ", vals);
-writeln("sums = ", sums);

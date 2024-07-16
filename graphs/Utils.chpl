@@ -11,6 +11,9 @@ module Utils {
   use CopyAggregation;
   use OS;
   use IO;
+  use IO.FormattedIO;
+  use Time;
+  use CommDiagnostics;
 
   /* Pulled from Arkouda. Used as the comparator for arrays made of tuples. */
   record contrivedComparator {
@@ -519,5 +522,65 @@ module Utils {
     fillRandom(dst, 0, n-1);
 
     return (src, dst);
+  }
+
+  /*
+  Hacky way to output a `.csv` file from the source of 
+  `printCommDiagnosticsTable` within the `CommDiagnostics` module.
+  */
+  proc commDiagnosticsToCsv(comms, file, kernel, printEmptyColumns=false) throws {
+    use Reflection, Math;
+
+    var now = dateTime.now();
+    var outputFilename = "bfsComm_" + kernel + "_" + numLocales:string + "L_" + 
+                        file + "_" + now:string + ".csv";
+    var outputFile = open(outputFilename, ioMode.cw);
+    var outputFileWriter = outputFile.writer(locking=false);
+
+    // grab all comm diagnostics
+    var CommDiags = getCommDiagnostics();
+
+    param unstable = "unstable";
+
+    // cache number of fields and store vector of whether field is active
+    param nFields = getNumFields(chpl_commDiagnostics);
+
+    // How wide should the column be for this field?  A negative value
+    // indicates an unstable field.  0 indicates that the field should
+    // be skipped in the table.
+    var fieldWidth: [0..<nFields] int;
+
+    // print column headers while determining which fields are active
+    outputFileWriter.writef("%s", "locale");
+    for param fieldID in 0..<nFields {
+      param name = getFieldName(chpl_commDiagnostics, fieldID);
+      var maxval = 0;
+      for locID in LocaleSpace do
+        maxval = max(maxval, getField(CommDiags[locID], fieldID).safeCast(int));
+
+      if printEmptyColumns || maxval != 0 {
+        const width = if commDiagsPrintUnstable == false && name == "amo"
+                        then -unstable.size
+                        else max(name.size, ceil(log10(maxval+1)):int);
+        fieldWidth[fieldID] = width;
+
+        outputFileWriter.writef(",%s", name);
+      }
+    }
+    outputFileWriter.writeln();
+
+    // print a row per locale showing the active fields
+    for locID in LocaleSpace {
+      outputFileWriter.writef("%s", locID:string);
+      for param fieldID in 0..<nFields {
+        var width = fieldWidth[fieldID];
+        const count = if width < 0 then unstable
+                                    else getField(CommDiags[locID],
+                                                  fieldID):string;
+        if width != 0 then
+          outputFileWriter.writef(",%s", count);
+      }
+      outputFileWriter.writeln();
+    }
   }
 }

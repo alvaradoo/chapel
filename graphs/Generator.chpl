@@ -21,7 +21,7 @@ module Generator {
   }
 
   proc genRMATgraph(a:real, b:real, c:real, d:real, SCALE:int, nVERTICES:int,
-                    nEDGES:int, maxEweight:int, SSCA2Noise:bool = false) {
+                    nEDGES:int, maxEweight:int) {
     const vRange = 1..nVERTICES,
           eRange = 1..nEDGES;
 
@@ -30,7 +30,6 @@ module Generator {
     var A = blockDist.createArray({eRange}, real),
         B = blockDist.createArray({eRange}, real),
         C = blockDist.createArray({eRange}, real),
-        norm = blockDist.createArray({eRange}, real),
         unifRandom = blockDist.createArray({eRange}, real),
         edges = blockDist.createArray({eRange}, (int,int));
 
