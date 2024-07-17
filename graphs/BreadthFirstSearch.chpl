@@ -15,6 +15,153 @@ module BreadthFirstSearch {
   use VertexCentricGraph;
   use Aggregators;
 
+  /*
+    Helper method to convert parent array to level array. Assumes passed source
+    is the internal representation of the vertex.
+  */
+  proc parentToLevel(in parent, source) {
+    var level = blockDist.createArray(parent.domain, int);
+    var visited = blockDist.createArray(parent.domain, bool);
+    var currLevel = 0;
+    level = -1;
+    visited = false;
+
+    var frontiers: [{0..1}] list(int, parSafe=true);
+    frontiers[0] = new list(int, parSafe=true);
+    frontiers[1] = new list(int, parSafe=true);
+    frontiersIdx = 0;
+    frontiers[frontiersIdx].pushBack(source);
+
+    forall (p,v) in zip(parent, visited) do if p != -1 then v = true;
+    var visitedReduced = || reduce visited;
+    while visitedReduced {
+      coforall loc in Locales 
+      with (ref level, ref parent, ref frontiers) 
+      do on loc {
+        forall u in frontiers[frontiersIdx] {
+          level[u] = currLevel;
+          visited[u] = false;
+          parent[u] = -1;
+        }
+        var lo = parent.localSubdomain(loc).low;
+        var hi = parent.localSubdomain(loc).high;
+        const ref lSlice = parent.localSlice(lo..hi);
+        forall (v,d) in zip(lSlice,lo..hi) {
+          var isFound = frontiers[frontiersIdx].find(v);
+          if isFound != -1 then frontiers[(frontiersIdx + 1) % 2].pushBack(d);
+        }
+      }
+      currLevel += 1;
+      frontiers[frontiersIdx].clear();
+      frontiersIdx = (frontiersIdx + 1) % 2;
+      visitedReduced = || reduce visited;
+    }
+    return level;
+  }
+
+  proc bfsParentVertexAgg(inGraph: shared Graph, source:int) {
+    var graph = toVertexCentricGraph(inGraph);
+
+    coforall loc in Locales with(ref frontiers) do on loc {
+      frontiers[0] = new list(int, parSafe=true);
+      frontiers[1] = new list(int, parSafe=true);
+    }
+    frontiersIdx = 0;
+    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+
+    var parent = blockDist.createArray(graph.vertexMapper.domain, int);
+    parent = -1;
+    on graph.findLoc(internalSource) {
+      frontiers[frontiersIdx].pushBack(internalSource);
+      parent[internalSource] = internalSource;
+    }
+
+    while true {
+      var pendingWork:bool;
+      coforall loc in Locales 
+      with (|| reduce pendingWork, ref parent, ref frontiers) 
+      do on loc {
+        var frontierAgg = new listDstAggregator(int);
+        var parentAgg = new DstAggregator(int);
+        // var localVAgg = new SrcAggregator(int);
+        for u in frontiers[frontiersIdx] {
+          for v in graph.neighborsInternal(u) {
+            
+            // This below might be useful if either of the for loops right 
+            // above are forall loops instead.
+            // var localV:int; 
+            // localVAgg.copy(localV, parent[v]);
+            // localVAgg.flush();
+            // if localV == -1 {
+            
+            if parent[v] == -1 {
+              parentAgg.copy(parent[v], u);
+              frontierAgg.copy(graph.findLoc(v).id, v);
+              pendingWork = true;
+            }
+          }
+        }
+        frontiers[frontiersIdx].clear();
+      }
+      if !pendingWork then break;
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    return parent;
+  }
+
+  proc bfsParentEdgeAgg(inGraph: shared Graph, source:int) {
+    var graph = toEdgeCentricGraph(inGraph);
+
+    coforall loc in Locales with(ref frontiers) do on loc {
+      frontiers[0] = new list(int, parSafe=true);
+      frontiers[1] = new list(int, parSafe=true);
+    }
+    frontiersIdx = 0;
+    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+
+    var parent = blockDist.createArray(graph.vertexMapper.domain, int);
+    parent = -1;
+    for lc in graph.findLocs(internalSource) {
+      on lc {
+        frontiers[frontiersIdx].pushBack(internalSource);
+        parent[internalSource] = internalSource;
+      }
+    }
+
+    while true {
+      var pendingWork:bool;
+      coforall loc in Locales 
+      with (|| reduce pendingWork, ref parent, ref frontiers) 
+      do on loc {
+        var frontierAgg = new listDstAggregator(int);
+        var parentAgg = new DstAggregator(int);
+        // var localVAgg = new SrcAggregator(int);
+        for u in frontiers[frontiersIdx] {
+          for v in graph.neighborsInternal(u) {
+            
+            // This below might be useful if either of the for loops right 
+            // above are forall loops instead.
+            // var localV:int; 
+            // localVAgg.copy(localV, parent[v]);
+            // localVAgg.flush();
+            // if localV == -1 {
+            
+            if parent[v] == -1 {
+              parentAgg.copy(parent[v], u);
+              var locs = graph.findLocs(v);
+              for lc in locs do frontierAgg.copy(lc.id, v);
+              pendingWork = true;
+            }
+          }
+        }
+        frontiers[frontiersIdx].clear();
+      }
+      if !pendingWork then break;
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    return parent;
+  }
+
   proc bfsLevelVertexAgg(inGraph: shared Graph, source:int) {
     var graph = toVertexCentricGraph(inGraph);
 

@@ -103,3 +103,17 @@ writeln(
   && reduce 
   (bfsLevelEdge(toGraph(edgeGraph), 1) == bfsAggregationVertex(toGraph(vertexGraph), 1))
 );
+writeln();
+
+var level1 = bfsParentVertexAgg(toGraph(vertexGraph), 1);
+writeln(
+  && reduce
+  (bfsLevelVertexAgg(toGraph(vertexGraph), 1) == parentToLevel(level1, 0))
+);
+writeln();
+
+var level2 = bfsParentEdgeAgg(toGraph(edgeGraph), 1);
+writeln(
+  && reduce
+  (bfsLevelVertexAgg(toGraph(vertexGraph), 1) == parentToLevel(level2, 0))
+);
