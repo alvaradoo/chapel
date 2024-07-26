@@ -100,21 +100,13 @@ module Aggregators {
   /****************************************************************************/
   /*************************** MULTI-ARRAY AGGREGATOR *************************/
   /****************************************************************************/
-  record frontierWrapper {
-    var D = blockDist.createDomain({0..1, 0..1});
-    var A: [D] bool;
-  }
+  // Declare global frontier queues, in this case it is a bitmap. 
+  var frontierMAD = blockDist.createDomain({0..1, 0..1});
+  var frontierMA: [frontierMAD] bool;
 
-  record parentWrapper {
-    var D = blockDist.createDomain({0..1});
-    var A: [D] int;
-  }
-
-  // Declare our global frontier queues.
-  var frontierMA:frontierWrapper;
-
-  // Declare our per-locale parents array wrapper.
-  var parentsMA:parentWrapper;
+  // Declare global parents array to keep track of the parent of each vertex.
+  var parentsMAD = blockDist.createDomain({0..1});
+  var parentsMA: [parentsMAD] int;
 
   record SpecialtyVertexDstAggregator {
     type eltType;
@@ -178,11 +170,9 @@ module Aggregators {
       on Locales[loc] {
         for srcVal in rBuffer.localIter(remBufferPtr, myBufferIdx) {
           var (v,d) = srcVal;
-          writeln("received v = ", v, " checking existing parent = ", parentsMA.A[v]);
-          if parentsMA.A[v] == -1 {
-            writeln("assigning v = ", v, " parent d = ", d);
-            parentsMA.A[v] = d;
-            frontierMA.A[(frontiersIdx + 1) % 2, v] = true;
+          if parentsMA[v] == -1 {
+            parentsMA[v] = d;
+            frontierMA[(frontiersIdx + 1) % 2, v] = true;
           }
         }
         if freeData then rBuffer.localFree(remBufferPtr); // Free the memory.

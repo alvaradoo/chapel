@@ -67,56 +67,42 @@ module BreadthFirstSearch {
     var hi = graph.vertexMapper.domain.high;
     const myTargetLocales = reshape(Locales, {0..0, 0..#numLocales});
 
-    // Change frontierMA.
-    frontierMA.D = blockDist.createDomain({0..1, lo..hi},
+    // Change frontierMAD and frontierMA to match current graph dimensions.
+    frontierMAD = blockDist.createDomain({0..1, lo..hi},
                                           targetLocales=myTargetLocales);
-    frontierMA.A = false;
+    frontierMA = false;
     frontiersIdx = 0;
 
-    // Change parentsMA.
-    parentsMA.D = blockDist.createDomain({lo..hi});
-    parentsMA.A = -1;
+    // Change parentsMAD and parentsMA to match current graph dimensions.
+    parentsMAD = blockDist.createDomain({lo..hi});
+    parentsMA = -1;
     
     var internalSource = binarySearch(graph.vertexMapper, source)[1];
-    frontierMA.A[frontiersIdx,internalSource] = true;
-    parentsMA.A[internalSource] = internalSource;
+    frontierMA[frontiersIdx,internalSource] = true;
+    parentsMA[internalSource] = internalSource;
 
     while true {
       var pendingWork:bool;
-      coforall loc in Locales 
-      with (|| reduce pendingWork, ref frontierMA, ref parentsMA) 
+      coforall loc in Locales with (|| reduce pendingWork) 
       do on loc {
-        var lo = parentsMA.A.localSubdomain().low;
-        var hi = parentsMA.A.localSubdomain().high;
+        var lo = parentsMA.localSubdomain().low;
+        var hi = parentsMA.localSubdomain().high;
         forall (u,d) in 
-        zip(frontierMA.A[frontiersIdx,lo..hi],frontierMA.D[frontiersIdx,lo..hi]) 
-        with (|| reduce pendingWork, 
-              var frontierAgg = new SpecialtyVertexDstAggregator((int,int)),
-              ref frontierMA, ref parentsMA) {
+        zip(frontierMA[frontiersIdx,lo..hi],frontierMAD[frontiersIdx,lo..hi])
+        with (|| reduce pendingWork,
+              var frontierAgg = new SpecialtyVertexDstAggregator((int,int))) {
           if u {
-            for v in graph.neighborsInternal(d) {
-              var destID = graph.findLoc(v).id;
-              if destID != here.id {
-                writeln("sending v = ", v, " to ", destID, " from ", here.id);
-                frontierAgg.copy(destID, (v,d));
-              }
-              else {
-                if parentsMA.A[v] == -1 {
-                  writeln("locally updating v = ", v);
-                  parentsMA.A[v] = d;
-                  frontierMA.A[(frontiersIdx+1)%2,v] = true;
-                }
-              }
-            }
+            for v in graph.neighborsInternal(d) do
+              frontierAgg.copy(graph.findLoc(v).id, (v,d));
             pendingWork = true;
           }
         }
       }
       if !pendingWork then break;
-      frontierMA.A[frontiersIdx,..] = false;
+      frontierMA[frontiersIdx,..] = false;
       frontiersIdx = (frontiersIdx+1)%2;
     }
-    return parentsMA.A;
+    return parentsMA;
   }
   
   proc bfsParentEdgeAgg(inGraph: shared Graph, source:int) {
