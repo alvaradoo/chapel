@@ -112,7 +112,7 @@ module Aggregators {
 
   // Declare our global frontier queues.
   var frontierMA:frontierWrapper;
-  
+
   // Declare our per-locale parents array wrapper.
   var parentsMA:parentWrapper;
 
@@ -166,7 +166,7 @@ module Aggregators {
       if myBufferIdx == 0 then return;
 
       // Get remote buffer and allocate that space, if it does not already
-      // exist. The metho `cachedAlloc` is defined in the module 
+      // exist. The method `cachedAlloc` is defined in the module 
       // `CopyAggregation`.
       ref rBuffer = rBuffers[loc];
       const remBufferPtr = rBuffer.cachedAlloc();
@@ -176,11 +176,13 @@ module Aggregators {
       
       // On the remote locale, populate frontier from rBuffer.
       on Locales[loc] {
-        ref f = frontierMA;
         for srcVal in rBuffer.localIter(remBufferPtr, myBufferIdx) {
-          if parentsMA.A[srcVal[0]] == -1 {
-            parentsMA.A[srcVal[0]] = srcVal[1];
-            f.A[(frontiersIdx+1)%2,srcVal[0]] = true;
+          var (v,d) = srcVal;
+          writeln("received v = ", v, " checking existing parent = ", parentsMA.A[v]);
+          if parentsMA.A[v] == -1 {
+            writeln("assigning v = ", v, " parent d = ", d);
+            parentsMA.A[v] = d;
+            frontierMA.A[(frontiersIdx + 1) % 2, v] = true;
           }
         }
         if freeData then rBuffer.localFree(remBufferPtr); // Free the memory.
@@ -205,7 +207,7 @@ module Aggregators {
 
   // Declare our global frontier queues.
   var fDBA: [Dfrontier] DynamicBoolArray;
-  
+
   // Declare our per-locale parents array wrapper.
   var parents: [rcDomain] Parents;
 
@@ -286,7 +288,6 @@ module Aggregators {
             f.A[srcVal[0]] = true;
           }
         }
-
         if freeData then rBuffer.localFree(remBufferPtr); // Free the memory.
       }
       if freeData then rBuffer.markFreed(); // Mark memory as freed.

@@ -54,6 +54,8 @@ module EdgeCentricGraph {
     var seg;
     var vertexMapper;
     var edgeRangesPerLocale;
+    var numVertices;
+    var numEdges;
 
     /*
       Using two existing arrays that represent the source and destination
@@ -88,6 +90,8 @@ module EdgeCentricGraph {
       this.seg = segments;
       this.vertexMapper = vertices;
       this.edgeRangesPerLocale = generateRanges(this.src);
+      this.numVertices = this.vertexMapper.size;
+      this.numEdges = this.src.size;
     }
 
     /*
@@ -113,18 +117,17 @@ module EdgeCentricGraph {
       assuming that `ui` is the internal representation of a vertex `u`.
     */
     pragma "no copy return"
-    proc neighborsInternal(ui:int, 
-                           param ensureLocal:bool=false, loc:locale=here) {
+    proc neighborsInternal(ui:int, param ensureLocal:bool=false) {
       if !ensureLocal then {
         return this.dst[this.seg[ui]..<this.seg[ui+1]];
       } else {
         var adjListStart = this.seg[ui];
-        var adjListEnd = this.seg[ui+1];
-        var srcLo = this.src.localSubdomain(loc).low;
-        var srcHi = this.src.localSubdomain(loc).high;
+        var adjListEnd = this.seg[ui+1] - 1;
+        var srcLo = this.src.localSubdomain().low;
+        var srcHi = this.src.localSubdomain().high;
         var actualStart = max(adjListStart, srcLo);
         var actualEnd = min(srcHi, adjListEnd);
-        return this.dst.localSlice(actualStart..<actualEnd);
+        return this.dst.localSlice(actualStart..actualEnd);
       }
     }
 

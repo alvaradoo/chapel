@@ -20,7 +20,9 @@ module Graph {
       placeHolderBlockA.type,
       placeHolderBlockA.type,
       placeHolderBlockA.type,
-      placeHolderReplicatedA.type
+      placeHolderReplicatedA.type,
+      int,
+      int
     );
   }
 
@@ -28,6 +30,7 @@ module Graph {
     return try! inGraph:shared VertexCentricGraph(
       placeHolderBlockAVertex.type,
       placeHolderBlockA.type,
+      int,
       int
     );
   }
