@@ -100,9 +100,9 @@ module Aggregators {
   /****************************************************************************/
   /*************************** MULTI-ARRAY AGGREGATOR *************************/
   /****************************************************************************/
-  // Declare global frontier queues, in this case it is a bitmap. 
-  var frontierMAD = blockDist.createDomain({0..1, 0..1});
-  var frontierMA: [frontierMAD] bool;
+  // Declare global visited bitmap to track if a vertex has been visited or not.
+  var visitedMAD = blockDist.createDomain({0..1});
+  var visitedMA: [visitedMAD] atomic bool;
 
   // Declare global parents array to keep track of the parent of each vertex.
   var parentsMAD = blockDist.createDomain({0..1});
@@ -168,11 +168,12 @@ module Aggregators {
       
       // On the remote locale, populate frontier from rBuffer.
       on Locales[loc] {
+        ref f = frontiers[(frontiersIdx + 1) % 2];
         for srcVal in rBuffer.localIter(remBufferPtr, myBufferIdx) {
-          var (v,d) = srcVal;
-          if parentsMA[v] == -1 {
-            parentsMA[v] = d;
-            frontierMA[(frontiersIdx + 1) % 2, v] = true;
+          var (v,p) = srcVal;
+          if !visitedMA[v].testAndSet() {
+            parentsMA[v] = p;
+            f.pushBack(v);
           }
         }
         if freeData then rBuffer.localFree(remBufferPtr); // Free the memory.
