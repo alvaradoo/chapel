@@ -14,6 +14,7 @@ module Utils {
   use IO.FormattedIO;
   use Time;
   use CommDiagnostics;
+  use EdgeCentricGraph;
 
   /* Pulled from Arkouda. Used as the comparator for arrays made of tuples. */
   record contrivedComparator {
@@ -450,7 +451,7 @@ module Utils {
     }
   }
 
-  proc matrixMarketFileToArrays(path) throws {
+  proc matrixMarketFileToGraph(path) throws {
     try { var f = open(path, ioMode.r); f.close(); }
     catch e:FileNotFoundError { writeln("Encountered FileNotFoundError."); }
     catch e { writeln("Unknown error."); }
@@ -511,7 +512,7 @@ module Utils {
       ind += 1;
     }
 
-    return (src, dst, wgt);
+    return new shared EdgeCentricGraph(src, dst);
   }
 
   proc gnp(n, m) {
@@ -521,19 +522,18 @@ module Utils {
     fillRandom(src, 0, n-1);
     fillRandom(dst, 0, n-1);
 
-    return (src, dst);
+    return new shared EdgeCentricGraph(src, dst);
   }
 
   /*
   Hacky way to output a `.csv` file from the source of 
   `printCommDiagnosticsTable` within the `CommDiagnostics` module.
   */
-  proc commDiagnosticsToCsv(comms, file, kernel, printEmptyColumns=false) throws {
+  proc commDiagnosticsToCsv(comms, identifier:string, kernel:string, printEmptyColumns=false) throws {
     use Reflection, Math;
 
-    var now = dateTime.now();
-    var outputFilename = "bfsComm_" + kernel + "_" + numLocales:string + "L_" + 
-                        file + "_" + now:string + ".csv";
+    writeln("identifier = ", identifier);
+    var outputFilename = "comm_" + kernel + "_" + numLocales:string + "L_" + identifier + ".csv";
     var outputFile = open(outputFilename, ioMode.cw);
     var outputFileWriter = outputFile.writer(locking=false);
 
