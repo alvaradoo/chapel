@@ -77,16 +77,9 @@ module Main {
     var numerator:real = 0.0;
     for d in data do numerator += (d - mean)**2;
     var stdDev = sqrt(numerator/(n-1));
-    
-    // Sort data.
-    var dataWithIndices: [data.domain] (real,int);
-    for (i,d) in zip(data.domain,data) do dataWithIndices[i] = (d,i);
-    sort(dataWithIndices);
-    var sortedIndices: [data.domain] int;
-    for (t,si) in zip(dataWithIndices,sortedIndices) do si = t[1];
-    var sortedData = data[sortedIndices];
 
-    // Get order statistics.
+    // Sort data and then get order statistics.
+    sort(data);
     var minimum = data[1];
     var firstQuartile = (data[n/4] + data[(n+1)/4]) * 0.5;
     var median = (data[n/2] + data[(n+1)/2]) * 0.5;
