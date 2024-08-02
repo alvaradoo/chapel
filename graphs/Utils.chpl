@@ -532,8 +532,7 @@ module Utils {
   proc commDiagnosticsToCsv(comms, identifier:string, kernel:string, printEmptyColumns=false) throws {
     use Reflection, Math;
 
-    writeln("identifier = ", identifier);
-    var outputFilename = "comm_" + kernel + "_" + numLocales:string + "L_" + identifier + ".csv";
+    var outputFilename = identifier + "_comm_" + kernel + "_" + numLocales:string + "L.csv";
     var outputFile = open(outputFilename, ioMode.cw);
     var outputFileWriter = outputFile.writer(locking=false);
 

@@ -4,6 +4,8 @@ module Main {
   use CommDiagnostics;
   use IO.FormattedIO;
   use IO;
+  use Search;
+  use Sort;
 
   use Graph;
   use Generator;
@@ -16,49 +18,109 @@ module Main {
 
   config const scale = 10;
   config const edgeFactor = 16;
-  config const (a,b,c,d) = (0.57,0.19,0.19,0.5);
+  config const (a,b,c,d) = (0.57,0.19,0.19,0.05);
   config const maxWeight = 2;
-  
-  config const trials = 64;
+
   config const measureComms = false;
   config const identifier = "rmat";
 
   config const bfsAlgorithm = "default"; // or custom
+  config const skipValidation = true;
+  config const skipBFSprints = false;
+  config const trials = 64;
 
-  proc runBFS(method, graph, sources, ref runs) {
+  /*
+    The BFS procedures should be designed as first-class functions that 
+    contain only non-generic parameters and do not return any generic values. 
+
+    The parameter `methodReturn` is to specify if the BFS method returns a 
+    parent or level/depth array to ensure the proper validation method is 
+    utilized.
+  */
+  proc runBFS(method, graph, const ref sources, ref runs, ref teps, ref eCounts,
+              methodReturn:string) {
     var timer:stopwatch;
     for i in 1..trials {
+      var source = sources[i];
+      if !skipBFSprints then writef("Running BFS %i\n", source);
       timer.start();
-      var res = method(graph:shared Graph, sources[i]);
+      var res = method(graph:shared Graph, source);
       timer.stop();
+      var edgeCount = getEdgeCountForTeps(res, graph) / 2;
+      /* Not needed yet until validation can be enabled.
+      var levels = if methodReturn == "parent" then parentToLevel(res, source) 
+                   else res; */
       runs[i] = timer.elapsed();
+      eCounts[i] = edgeCount;
+      teps[i] = eCounts[i] / runs[i];
+      if !skipBFSprints {
+        writef("Time for BFS %i is %dr\n", source, runs[i]);
+        writef("TEPs for BFS %i is %r\n", source, teps[i]);
+      }
+      if !skipValidation then halt("Validation not yet integrated.");
       timer.reset();
     }
-    return runs;
   }
 
-  proc main() throws {
+  /*
+    Computes statistics for a given data array which could be an array of
+    execution times or TEPs for BFS or SSSP.
+  */
+  proc computeStatistics(in data) {
+    // Sample size.
+    var n = data.size;
+
+    // Compute mean.
+    var mean:real = + reduce data / n;
+    
+    // Compute standard deviation.
+    var numerator:real = 0.0;
+    for d in data do numerator += (d - mean)**2;
+    var stdDev = sqrt(numerator/(n-1));
+    
+    // Sort data.
+    var dataWithIndices: [data.domain] (real,int);
+    for (i,d) in zip(data.domain,data) do dataWithIndices[i] = (d,i);
+    sort(dataWithIndices);
+    var sortedIndices: [data.domain] int;
+    for (t,si) in zip(dataWithIndices,sortedIndices) do si = t[1];
+    var sortedData = data[sortedIndices];
+
+    // Get order statistics.
+    var minimum = data[1];
+    var firstQuartile = (data[n/4] + data[(n+1)/4]) * 0.5;
+    var median = (data[n/2] + data[(n+1)/2]) * 0.5;
+    var thirdQuartile = (data[n-(n/4)] + data[n-((n+1)/4)]) * 0.5;
+    var maximum = data[n];
+
+    return (mean,stdDev,minimum,firstQuartile,median,thirdQuartile,maximum);
+  }
+
+  proc main() {
+    if a + b + c + d != 1 then
+      halt("Kronecker parameters (a,b,c,d) do not add up to 1.");
+    
+    if filepath.size > 0 && identifier == "rmat" && measureComms then
+      halt("When measureComms is true for a .mtx file, identifier must not be rmat.");
+
     var timer:stopwatch;
     var isRandom = if filepath.size > 0 then false else true;
-    var commFileIdentifier = if measureComms && isRandom then identifier + "_" + scale:string 
-                             else if measureComms then identifier else "";
+    var commFileIdentifier:string;
+    if measureComms && isRandom then commFileIdentifier = identifier + "_" + scale:string;
+    else if measureComms then commFileIdentifier = identifier;
+    else commFileIdentifier = "";
 
-    writeln("commFileIdentifier = ", commFileIdentifier);
     var ns = if isRandom then 2**scale else 0;
     var ms = if isRandom then 2**scale * edgeFactor else 0;
 
-    writeln("commFileIdentifier = ", commFileIdentifier);
     timer.start(); if measureComms then startCommDiagnostics();
-    writeln("commFileIdentifier = ", commFileIdentifier);
-    var edgeView = if isRandom then genRMATgraph(a,b,c,d,scale,ns,ms,maxWeight)
-                   else matrixMarketFileToGraph(filepath);
+    var edgeView: shared EdgeCentricGraph(?);
+    if isRandom then edgeView = genRMATgraph(a,b,c,d,scale,ns,ms,maxWeight);
+    else { try! edgeView = matrixMarketFileToGraph(filepath); }
     timer.stop(); if measureComms then stopCommDiagnostics();
-    writeln("commFileIdentifier = ", commFileIdentifier);
     var edgeListGenTime = timer.elapsed();
-    writeln("commFileIdentifier = ", commFileIdentifier);
-    if measureComms { 
-      writeln("commFileIdentifier = ", commFileIdentifier);
-      commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, "edgeListGen");
+    if measureComms {
+      try! commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, "edgeListGen");
       resetCommDiagnostics();
     }
     timer.reset();
@@ -68,7 +130,7 @@ module Main {
     timer.stop(); if measureComms then stopCommDiagnostics();
     var graphConstructionTime = timer.elapsed();
     if measureComms { 
-      commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, "graphConstruction");
+      try! commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, "graphConstruction");
       resetCommDiagnostics();
     }
     timer.reset();
@@ -77,26 +139,69 @@ module Main {
     var m = vertexView.numEdges;
 
     var runs:[1..trials] real;
-    var sourcesIdx:[1..trials] int;
-    fillRandom(sourcesIdx, 0, n-1);
-    var sources: [sourcesIdx.domain] int;
-    for (u,ui) in zip (sources,sourcesIdx) do u = vertexView.vertexMapper[ui];
+    var sources:[1..trials] int;
+    var teps: [1..trials] real;
+    var eCounts: [1..trials] int;
+    fillRandom(sources, 0, n-1);
     
     if measureComms then startCommDiagnostics();
     if bfsAlgorithm == "default" then
-      runBFS(bfsParentVertexAgg, vertexView, sources, runs);
+      runBFS(bfsParentVertexAgg, vertexView, sources, runs, teps, eCounts, "parent");
     else if bfsAlgorithm == "custom" then
-      runBFS(bfsLevelVertexAgg, vertexView, sources, runs);
+      runBFS(bfsLevelVertexAgg, vertexView, sources, runs, teps, eCounts, "level");
     if measureComms then stopCommDiagnostics();
     if measureComms { 
-      commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, "bfs");
+      try! commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, "bfs");
       resetCommDiagnostics();
     }
-    var bfsTime = (+ reduce runs) / trials;
 
-    var line = "%s,%i,%i,%.2dr,%.2dr,%.2dr".format(
-      scale,n,m,edgeListGenTime,graphConstructionTime,bfsTime
-    );
-    writeln(line);
+    writef("%<40s %i\n", "SCALE:", scale);
+    writef("%<40s %i\n", "edgefactor:", edgeFactor);
+    writef("%<40s %i\n", "NBFS:", trials);
+    writef("%<40s %dr\n", "graph_generation:", edgeListGenTime);
+    writef("%<40s %i\n", "num_tasks_per_locale:", here.numPUs());
+    writef("%<40s %dr\n", "construction_time:", graphConstructionTime);
+    
+    var (bfsMean, bfsStdDev, bfsMinimum, bfsFirstQuartile, bfsMedian, 
+         bfsThirdQuartile, bfsMaximum) = computeStatistics(runs);
+    writef("%<40s %dr\n", "bfs  min_time:", bfsMinimum);
+    writef("%<40s %dr\n", "bfs  firstquartile_time:", bfsFirstQuartile);
+    writef("%<40s %dr\n", "bfs  median_time:", bfsMedian);
+    writef("%<40s %dr\n", "bfs  thirdquartile_time:", bfsThirdQuartile);
+    writef("%<40s %dr\n", "bfs  max_time:", bfsMaximum);
+    writef("%<40s %dr\n", "bfs  mean_time:", bfsMean);
+    writef("%<40s %dr\n", "bfs  stddev_time:", bfsStdDev);
+
+    var (eMean, eStdDev, eMinimum, eFirstQuartile, eMedian, 
+         eThirdQuartile, eMaximum) = computeStatistics(eCounts);
+    writef("%<40s %i\n", "min_nedge:", eMinimum);
+    writef("%<40s %i\n", "firstquartile_nedge:", eFirstQuartile);
+    writef("%<40s %i\n", "median_nedge:", eMedian);
+    writef("%<40s %i\n", "thirdquartile_nedge:", eThirdQuartile);
+    writef("%<40s %i\n", "max_nedge:", eMaximum);
+    writef("%<40s %i\n", "mean_nedge:", eMean);
+    writef("%<40s %i\n", "stddev_nedge:", eStdDev);
+
+    var (tepsMean, tepsStdDev, tepsMinimum, tepsFirstQuartile, tepsMedian, 
+         tepsThirdQuartile, tepsMaximum) = computeStatistics(teps);
+    writef("%<40s %r\n", "min_teps:", tepsMinimum);
+    writef("%<40s %r\n", "firstquartile_teps:", tepsFirstQuartile);
+    writef("%<40s %r\n", "median_teps:", tepsMedian);
+    writef("%<40s %r\n", "thirdquartile_teps:", tepsThirdQuartile);
+    writef("%<40s %r\n", "max_teps:", tepsMaximum);
+    writef("%<40s %r\n", "harmonic_mean_teps:", tepsMean);
+
+    // Below is originally from the Graph500 source code: 
+    // https://github.com/graph500/graph500/tree/newreference
+    /* Formula from:
+    * Title: The Standard Errors of the Geometric and Harmonic Means and
+    *        Their Application to Index Numbers
+    * Author(s): Nilan Norris
+    * Source: The Annals of Mathematical Statistics, Vol. 11, No. 4 (Dec., 1940), pp. 445-448
+    * Publisher(s): Institute of Mathematical Statistics
+    * Stable URL: http://www.jstor.org/stable/2235723
+    * (same source as in specification). */
+    var harmonicStdDevTeps = tepsStdDev/(tepsMean*tepsMean*sqrt(trials-1));
+    writef("%<40s %r\n", "harmonic_stddev_teps:", harmonicStdDevTeps);
   }
 }

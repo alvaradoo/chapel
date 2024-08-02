@@ -60,7 +60,22 @@ module BreadthFirstSearch {
     return level;
   }
 
-  proc bfsParentVertexAgg(inGraph: shared Graph, source:int) {
+  /*
+    Edge counts are needed to calculate traversed-edges-per-second (TEPs). The
+    validation step will check of this count is correct. The `array` can be 
+    either a parent array or a level/depth array.
+  */
+  proc getEdgeCountForTeps(const ref array, graph) {
+    var edgeCount = 0;
+    forall (i,p) in zip(array.domain, array) with (+ reduce edgeCount){
+      if p != -1 {
+        for j in graph.neighborsInternal(i) do edgeCount += 1;
+      }
+    }
+    return edgeCount;
+  }
+
+  proc bfsParentVertexAgg(inGraph: shared Graph, internalSource:int) {
     var graph = toVertexCentricGraph(inGraph);
     var lo = graph.vertexMapper.domain.low;
     var hi = graph.vertexMapper.domain.high;
@@ -79,7 +94,6 @@ module BreadthFirstSearch {
     parentsMAD = blockDist.createDomain({lo..hi});
     parentsMA = -1;
     
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
     on graph.findLoc(internalSource) {
       frontiers[frontiersIdx].pushBack(internalSource);
       visitedMA[internalSource].write(true);
@@ -104,7 +118,7 @@ module BreadthFirstSearch {
     return parentsMA;
   }
   
-  proc bfsParentEdgeAgg(inGraph: shared Graph, source:int) {
+  proc bfsParentEdgeAgg(inGraph: shared Graph, internalSource:int) {
     var graph = toEdgeCentricGraph(inGraph);
 
     coforall loc in Locales do on loc {
@@ -119,7 +133,6 @@ module BreadthFirstSearch {
       parents(1).A = -1;
     }
     frontiersIdx = 0;
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
 
     for lc in graph.findLocs(internalSource) {
       on lc {
@@ -152,7 +165,7 @@ module BreadthFirstSearch {
     return parentsToBlockDistParents(graph.vertexMapper.size);
   }
 
-  proc bfsLevelVertexAgg(inGraph: shared Graph, source:int) {
+  proc bfsLevelVertexAgg(inGraph: shared Graph, internalSource:int) {
     var graph = toVertexCentricGraph(inGraph);
 
     coforall loc in Locales with(ref frontiers) do on loc {
@@ -160,7 +173,6 @@ module BreadthFirstSearch {
       frontiers[1] = new list(int, parSafe=true);
     }
     frontiersIdx = 0;
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
 
     on graph.findLoc(internalSource) {
       frontiers[frontiersIdx].pushBack(internalSource);
@@ -168,6 +180,10 @@ module BreadthFirstSearch {
     var currLevel = 0; 
     var level = blockDist.createArray(graph.vertexMapper.domain, int);
     level = -1;
+
+    // Declare global visited bitmap to track if a vertex has been visited or not.
+    var visitedD = blockDist.createDomain(graph.vertexMapper.domain);
+    var visited: [visitedD] atomic bool;
 
     while true {
       var pendingWork:bool;
@@ -177,7 +193,7 @@ module BreadthFirstSearch {
         forall u in frontiers[frontiersIdx] 
         with (|| reduce pendingWork, var frontierAgg=new listDstAggregator(int)) 
         {
-          if level[u] == -1 {
+          if !visited[u].testAndSet() {
             level[u] = currLevel;
             for v in graph.neighborsInternal(u) do 
               frontierAgg.copy(graph.findLoc(v).id, v);
@@ -193,7 +209,7 @@ module BreadthFirstSearch {
     return level;
   }
 
-  proc bfsLevelVertex(inGraph: shared Graph, source:int) {
+  proc bfsLevelVertex(inGraph: shared Graph, internalSource:int) {
     var graph = toVertexCentricGraph(inGraph);
 
     var frontiers: [{0..1}] list(int, parSafe=true);
@@ -201,8 +217,7 @@ module BreadthFirstSearch {
     frontiers[1] = new list(int, parSafe=true);
 
     frontiersIdx = 0;
-    var currLevel = 0; 
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+    var currLevel = 0;
     frontiers[frontiersIdx].pushBack(internalSource);
     
     var level = blockDist.createArray(graph.vertexMapper.domain, int);
@@ -226,7 +241,7 @@ module BreadthFirstSearch {
     return level;
   }
 
-  proc bfsLevelEdgeAgg(inGraph: shared Graph, source:int) {
+  proc bfsLevelEdgeAgg(inGraph: shared Graph, internalSource:int) {
     var graph = toEdgeCentricGraph(inGraph);
 
     coforall loc in Locales with(ref frontiers) do on loc {
@@ -234,7 +249,6 @@ module BreadthFirstSearch {
       frontiers[1] = new list(int, parSafe=true);
     }
     frontiersIdx = 0;
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
 
     for lc in graph.findLocs(internalSource) {
       on lc do frontiers[frontiersIdx].pushBack(internalSource);
@@ -269,7 +283,7 @@ module BreadthFirstSearch {
     return level;
   }
 
-  proc bfsLevelEdge(inGraph: shared Graph, source:int) {
+  proc bfsLevelEdge(inGraph: shared Graph, internalSource:int) {
     var graph = toEdgeCentricGraph(inGraph);
 
     var frontiers: [{0..1}] list(int, parSafe=true);
@@ -277,8 +291,7 @@ module BreadthFirstSearch {
     frontiers[1] = new list(int, parSafe=true);
 
     frontiersIdx = 0;
-    var currLevel = 0; 
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
+    var currLevel = 0;
     frontiers[frontiersIdx].pushBack(internalSource);
     
     var level = blockDist.createArray(graph.vertexMapper.domain, int);
@@ -302,7 +315,7 @@ module BreadthFirstSearch {
     return level;
   }
 
-  proc bfsNoAggregationVertex(inGraph: shared Graph, source:int) {
+  proc bfsNoAggregationVertex(inGraph: shared Graph, internalSource:int) {
     var graph = toVertexCentricGraph(inGraph);
 
     var frontiers: [{0..1}] list(int, parSafe=true);
@@ -311,7 +324,6 @@ module BreadthFirstSearch {
 
     var frontiersIdx = 0; 
     var currLevel = 0;
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
     frontiers[frontiersIdx].pushBack(internalSource);
 
     var depth = blockDist.createArray(graph.vertexMapper.domain, int);
@@ -337,7 +349,7 @@ module BreadthFirstSearch {
     return depth;
   }
 
-  proc bfsNoAggregationEdge(inGraph: shared Graph, source:int) {
+  proc bfsNoAggregationEdge(inGraph: shared Graph, internalSource:int) {
     var graph = toEdgeCentricGraph(inGraph);
 
     var frontiers: [{0..1}] list(int, parSafe=true);
@@ -346,7 +358,6 @@ module BreadthFirstSearch {
 
     var frontiersIdx = 0; 
     var currLevel = 0;
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
     frontiers[frontiersIdx].pushBack(internalSource);
 
     var depth = blockDist.createArray(graph.vertexMapper.domain, int);
@@ -372,7 +383,7 @@ module BreadthFirstSearch {
     return depth;
   }
 
-  proc bfsAggregationVertex(inGraph: shared Graph, source:int) {
+  proc bfsAggregationVertex(inGraph: shared Graph, internalSource:int) {
     var graph = toVertexCentricGraph(inGraph);
 
     coforall loc in Locales with(ref frontiers) do on loc {
@@ -380,7 +391,6 @@ module BreadthFirstSearch {
       frontiers[1] = new list(int, parSafe=true);
     }
     frontiersIdx = 0;
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
 
     on graph.findLoc(internalSource) {
       frontiers[frontiersIdx].pushBack(internalSource);
@@ -415,7 +425,7 @@ module BreadthFirstSearch {
     return depth;
   }
 
-  proc bfsAggregationEdge(inGraph: shared Graph, source:int) {
+  proc bfsAggregationEdge(inGraph: shared Graph, internalSource:int) {
     var graph = toEdgeCentricGraph(inGraph);
 
     coforall loc in Locales with(ref frontiers) do on loc {
@@ -423,7 +433,6 @@ module BreadthFirstSearch {
       frontiers[1] = new list(int, parSafe=true);
     }
     frontiersIdx = 0;
-    var internalSource = binarySearch(graph.vertexMapper, source)[1];
 
     for lc in graph.findLocs(internalSource) {
       on lc do frontiers[frontiersIdx].pushBack(internalSource);

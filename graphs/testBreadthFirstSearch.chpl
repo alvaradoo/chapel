@@ -22,18 +22,16 @@ for SCALE in lowerSCALE..upperSCALE {
   var sourcesIdx:[1..trials] int;
   fillRandom(sourcesIdx, edgeView.vertexMapper.domain.first, 
                       edgeView.vertexMapper.domain.last);
-  var sources: [sourcesIdx.domain] int;
-  for (u,ui) in zip (sources,sourcesIdx) do u = edgeView.vertexMapper[ui];
   
   var final:bool;
-  for s in sources {
+  for s in sourcesIdx {
     var parentVertex = bfsParentVertexAgg(toGraph(vertexView), s);
     var parentEdge = bfsParentEdgeAgg(toGraph(edgeView), s);
     var levelVertex = bfsLevelVertexAgg(toGraph(vertexView), s);
     var levelEdge = bfsLevelEdgeAgg(toGraph(edgeView), s);
 
-    var p2LVertex = parentToLevel(parentVertex,binarySearch(vertexView.vertexMapper,s)[1]);
-    var p2LEdge = parentToLevel(parentEdge,binarySearch(edgeView.vertexMapper,s)[1]);
+    var p2LVertex = parentToLevel(parentVertex,s);
+    var p2LEdge = parentToLevel(parentEdge,s);
     
     var check1 = && reduce (p2LVertex == levelVertex);
     var check2 = && reduce (p2LEdge == levelVertex);
