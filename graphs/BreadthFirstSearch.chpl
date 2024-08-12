@@ -16,6 +16,11 @@ module BreadthFirstSearch {
   use VertexCentricGraph;
   use Aggregators;
 
+  /****************************************************************************/
+  /****************************************************************************/
+  /****************************DEFAULT BFS METHODS*****************************/
+  /****************************************************************************/
+  /****************************************************************************/
   /*
     Helper method to convert parent array to level array. Assumes passed source
     is the internal representation of the vertex.
@@ -75,48 +80,177 @@ module BreadthFirstSearch {
     return edgeCount;
   }
 
+  proc bfsParentVertexArray(inGraph: shared Graph, internalSource:int) {
+    use DynamicArray;
+    var graph = toVertexCentricGraph(inGraph);
+    var lo = graph.vertexMapper.domain.low;
+    var hi = graph.vertexMapper.domain.high;
+
+    coforall loc in Locales with (ref queues) do on loc {
+      queues[0] = new Array(int);
+      queues[1] = new Array(int);
+    }
+
+    // Change parents and visited to match current graph dimensions.
+    arrDist.redistribute({lo..hi});
+    arrDom = {lo..hi};
+    visitedAR = false;
+    parents = -1;
+    queueIdx = 0;
+
+    writeln("visitedAR = ", visitedAR);
+    
+    var frontierSize:int = 0;
+    on graph.findLoc(internalSource) {
+      queues[queueIdx].append(internalSource);
+      visitedAR[internalSource] = true;
+      parents[internalSource] = internalSource;
+    }
+    frontierSize = 1;
+
+    while frontierSize > 0 {
+      coforall loc in Locales do on loc {
+        forall u in queues[queueIdx] 
+        with (var agg = new DynamicArrayDstAggregator((int,int))) {
+          // writeln("Iterating over neighbors of ", u, ": ", graph.neighborsInternal(u));
+          for v in graph.neighborsInternal(u) do
+            agg.copy(graph.findLocNewer(v), (v,u));
+        }
+        queues[queueIdx].clear();
+      }
+      queueIdx = (queueIdx + 1) % 2;
+      frontierSize = 0;
+      coforall loc in Locales with (+ reduce frontierSize) do on loc {
+        frontierSize += queues[queueIdx].size;
+        // writeln("on loc ", here.id, " queues = ", queues[queueIdx]);
+      }
+      // writeln("frontierSize = ", frontierSize);
+    }
+    return parents;
+  }
+
   proc bfsParentVertexAgg(inGraph: shared Graph, internalSource:int) {
     var graph = toVertexCentricGraph(inGraph);
     var lo = graph.vertexMapper.domain.low;
     var hi = graph.vertexMapper.domain.high;
 
-    coforall loc in Locales with(ref frontiers) do on loc {
+    coforall loc in Locales with (ref frontiers) do on loc {
       frontiers[0] = new list(int, parSafe=true);
       frontiers[1] = new list(int, parSafe=true);
     }
 
-    // Change visitedMAD and visitedMA to match current graph dimensions.
-    visitedMAD = blockDist.createDomain({lo..hi});
+    // Change parentsMA and visitedMA to match current graph dimensions.
+    SpecialtyVertexDist.redistribute({lo..hi});
+    SpecialtyVertexDom = {lo..hi};
     forall a in visitedMA do a.write(false);
-    frontiersIdx = 0;
-
-    // Change parentsMAD and parentsMA to match current graph dimensions.
-    parentsMAD = blockDist.createDomain({lo..hi});
     parentsMA = -1;
+    frontiersIdx = 0;
     
+    var frontierSize:int = 0;
     on graph.findLoc(internalSource) {
       frontiers[frontiersIdx].pushBack(internalSource);
       visitedMA[internalSource].write(true);
       parentsMA[internalSource] = internalSource;
     }
+    frontierSize = 1;
 
-    while true {
-      var pendingWork:bool;
-      coforall loc in Locales with (|| reduce pendingWork) 
+    while frontierSize > 0 {
+      frontierSize = 0;
+      coforall loc in Locales with (+ reduce frontierSize) 
       do on loc {
-        forall u in frontiers[frontiersIdx] with (|| reduce pendingWork,
-          var frontierAgg = new SpecialtyVertexDstAggregator((int,int))) {
+        frontierSize += frontiers[frontiersIdx].size;
+        forall u in frontiers[frontiersIdx] 
+        with (var frontierAgg = new SpecialtyVertexDstAggregator((int,int))) {
           for v in graph.neighborsInternal(u) do
-              frontierAgg.copy(graph.findLoc(v).id, (v,u));
-          pendingWork = true;
+            frontierAgg.copy(graph.findLocNewer(v), (v,u));
         }
         frontiers[frontiersIdx].clear();
       }
-      if !pendingWork then break;
       frontiersIdx = (frontiersIdx + 1) % 2;
     }
     return parentsMA;
   }
+
+  proc bfsParentVertexAggProfile(inGraph: shared Graph, internalSource:int) {
+    use Time;
+    var timer:stopwatch;
+    
+    timer.start();
+    var graph = toVertexCentricGraph(inGraph);
+    var lo = graph.vertexMapper.domain.low;
+    var hi = graph.vertexMapper.domain.high;
+    writef("%<40s %dr\n", "toVertexCentricGraph:", timer.elapsed());
+    timer.clear();
+
+    coforall loc in Locales with(ref frontiers) do on loc {
+      frontiers[0] = new list(int, parSafe=true);
+      frontiers[1] = new list(int, parSafe=true);
+    }
+    writef("%<40s %dr\n", "frontier init:", timer.elapsed());
+    timer.clear();
+
+    // for loc in Locales {
+    //   writeln("visited localsubdomain ", loc.id, ": ", visitedMA.localSubdomain(loc));
+    //   writeln("parents localsubdomain ", loc.id, ": ", parentsMA.localSubdomain(loc));
+    // }
+
+    // Change parentsMA and visitedMA to match current graph dimensions.
+    SpecialtyVertexDist.redistribute({lo..hi});
+    SpecialtyVertexDom = {lo..hi};
+    writef("%<40s %dr\n", "resizing distribution:", timer.elapsed());
+    timer.clear();
+    
+    forall a in visitedMA do a.write(false);
+    parentsMA = -1;
+    frontiersIdx = 0;
+    writef("%<40s %dr\n", "initializing visited and parents:", timer.elapsed());
+    timer.clear();
+
+    // for loc in Locales {
+    //   writeln("visited localsubdomain ", loc.id, ": ", visitedMA.localSubdomain(loc));
+    //   writeln("parents localsubdomain ", loc.id, ": ", parentsMA.localSubdomain(loc));
+    // }
+    
+    var frontierSize:int = 0;
+    on graph.findLoc(internalSource) {
+      frontiers[frontiersIdx].pushBack(internalSource);
+      visitedMA[internalSource].write(true);
+      parentsMA[internalSource] = internalSource;
+    }
+    frontierSize = 1;
+    writef("%<40s %dr\n", "update root:", timer.elapsed());
+    timer.clear();
+
+    var iteration = 0;
+    while frontierSize > 0 {
+      frontierSize = 0;
+      coforall loc in Locales with (+ reduce frontierSize) 
+      do on loc {
+        frontierSize += frontiers[frontiersIdx].size;
+        forall u in frontiers[frontiersIdx] 
+        with (var frontierAgg = new SpecialtyVertexDstAggregator((int,int))) {
+          for v in graph.neighborsInternal(u) do
+            frontierAgg.copy(graph.findLocNew(v), (v,u));
+        }
+        frontiers[frontiersIdx].clear();
+      }
+      iteration += 1;
+      var text = "bfs iteration:" + iteration:string;
+      writef("%<40s %dr\n", text, timer.elapsed());
+      writef("%<40s %i\n", "frontier size:", frontierSize);
+      timer.clear();
+      frontiersIdx = (frontiersIdx + 1) % 2;
+    }
+    writeln();
+
+    return parentsMA;
+  }
+
+  /****************************************************************************/
+  /****************************************************************************/
+  /****************************EXTRA BFS METHODS*******************************/
+  /****************************************************************************/
+  /****************************************************************************/
   
   proc bfsParentEdgeAgg(inGraph: shared Graph, internalSource:int) {
     var graph = toEdgeCentricGraph(inGraph);
@@ -129,15 +263,15 @@ module BreadthFirstSearch {
       fDBA[1].D = {lo..hi};
       fDBA[0].A = false;
       fDBA[1].A = false;
-      parents(1).D = {lo..hi};
-      parents(1).A = -1;
+      parents1(1).D = {lo..hi};
+      parents1(1).A = -1;
     }
     frontiersIdx = 0;
 
     for lc in graph.findLocs(internalSource) {
       on lc {
         fDBA[frontiersIdx].A[internalSource] = true;
-        parents(1).A[internalSource] = internalSource;
+        parents1(1).A[internalSource] = internalSource;
       }
     }
     

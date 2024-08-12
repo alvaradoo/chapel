@@ -15,10 +15,14 @@ module Aggregators {
   /****************************************************************************/
   /************************ LIST PUSHBACK AGGREGATOR **************************/
   /****************************************************************************/
-  // Declare our global frontier queues
+  // Declare our global frontier queues with parallel safety.
   var Dfrontier = {0..1} dmapped new replicatedDist();
   var frontiers: [Dfrontier] list(int, parSafe=true);
   var frontiersIdx:int;
+
+  // Declare our global frontier queues without parallel safety.
+  var DfrontierSeq = {0..1} dmapped new replicatedDist();
+  var frontiersSeq: [DfrontierSeq] list(int);
   
   /*
     Aggregator to be utilized with Chapel lists in breadth-first search. 
@@ -100,13 +104,15 @@ module Aggregators {
   /****************************************************************************/
   /*************************** MULTI-ARRAY AGGREGATOR *************************/
   /****************************************************************************/
+  // Declare default distribution.
+  var SpecialtyVertexDist = new blockDist({0..<numLocales});
+  var SpecialtyVertexDom  = {0..<numLocales} dmapped SpecialtyVertexDist;
+  
   // Declare global visited bitmap to track if a vertex has been visited or not.
-  var visitedMAD = blockDist.createDomain({0..1});
-  var visitedMA: [visitedMAD] atomic bool;
+  var visitedMA: [SpecialtyVertexDom] atomic bool;
 
   // Declare global parents array to keep track of the parent of each vertex.
-  var parentsMAD = blockDist.createDomain({0..1});
-  var parentsMA: [parentsMAD] int;
+  var parentsMA: [SpecialtyVertexDom] int;
 
   record SpecialtyVertexDstAggregator {
     type eltType;
@@ -171,8 +177,8 @@ module Aggregators {
         ref f = frontiers[(frontiersIdx + 1) % 2];
         for srcVal in rBuffer.localIter(remBufferPtr, myBufferIdx) {
           var (v,p) = srcVal;
-          if !visitedMA[v].testAndSet() {
-            parentsMA[v] = p;
+          if !visitedMA.localAccess[v].testAndSet() {
+            parentsMA.localAccess[v] = p;
             f.pushBack(v);
           }
         }
@@ -199,14 +205,14 @@ module Aggregators {
   // Declare our global frontier queues.
   var fDBA: [Dfrontier] DynamicBoolArray;
 
-  // Declare our per-locale parents array wrapper.
-  var parents: [rcDomain] Parents;
+  // Declare our per-locale parents1 array wrapper.
+  var parents1: [rcDomain] Parents;
 
   proc parentsToBlockDistParents(n:int) {
     var blockParents = blockDist.createArray({0..<n}, int);
 
     coforall loc in Locales do on loc {
-      forall (u,d) in zip(parents(1).A, parents(1).D) do blockParents[d] = u;
+      forall (u,d) in zip(parents1(1).A, parents1(1).D) do blockParents[d] = u;
     }
 
     return blockParents;
@@ -274,8 +280,8 @@ module Aggregators {
       on Locales[loc] {
         ref f = fDBA[(frontiersIdx + 1) % 2];
         for srcVal in rBuffer.localIter(remBufferPtr, myBufferIdx) {
-          if parents(1).A[srcVal[0]] == -1 {
-            parents(1).A[srcVal[0]] = srcVal[1];
+          if parents1(1).A[srcVal[0]] == -1 {
+            parents1(1).A[srcVal[0]] = srcVal[1];
             f.A[srcVal[0]] = true;
           }
         }

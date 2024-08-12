@@ -80,7 +80,27 @@ module VertexCentricGraph {
       return this.adjacencies[ui].neighbors;
     }
 
+    /*
+      Returns a 32-bit or 64-bit function. chpl_nodeFromLocaleId returns an 
+      existing C object. 
+    */
+    proc findLocNew(ui:int) {
+      return chpl_nodeFromLocaleID(
+        __primitive("_wide_get_locale", adjacencies[ui])
+      );
+      // return adjacencies[ui].locale;
+    }
+
+    // this will return a `locale`, but will not construct it anew
+    proc findLocNewer(ui: int) {
+      return adjacencies.domain.distribution.idxToLocale(ui).id;
+    }
+
+    /*
+      Might be a potential killer.
+    */
     proc findLoc(ui:int) {
+      // return chpl_nodeFromLocaleID(__primitive("_wide_get_locale", adjacencies[ui]));
       return adjacencies[ui].locale;
     }
   }

@@ -28,6 +28,7 @@ module Main {
   config const skipValidation = true;
   config const skipBFSprints = false;
   config const trials = 64;
+  config const runProfile = false;
 
   /*
     The BFS procedures should be designed as first-class functions that 
@@ -57,6 +58,27 @@ module Main {
         writef("Time for BFS %i is %dr\n", source, runs[i]);
         writef("TEPs for BFS %i is %r\n", source, teps[i]);
       }
+      if !skipValidation then halt("Validation not yet integrated.");
+      timer.reset();
+    }
+  }
+
+  proc runBFSProfiler(method, graph, const ref sources, ref runs, ref teps, 
+                      ref eCounts, methodReturn:string) {
+    var timer:stopwatch;
+    for i in 1..trials {
+      var source = sources[i];
+      if !skipBFSprints then writef("Running BFS %i\n", source);
+      timer.start();
+      var res = method(graph:shared Graph, source);
+      timer.stop();
+      var edgeCount = getEdgeCountForTeps(res, graph) / 2;
+      /* Not needed yet until validation can be enabled.
+      var levels = if methodReturn == "parent" then parentToLevel(res, source) 
+                   else res; */
+      runs[i] = timer.elapsed();
+      eCounts[i] = edgeCount;
+      teps[i] = eCounts[i] / runs[i];
       if !skipValidation then halt("Validation not yet integrated.");
       timer.reset();
     }
@@ -137,12 +159,15 @@ module Main {
     var eCounts: [1..trials] int;
     fillRandom(sources, 0, n-1);
     
-    if measureComms then startCommDiagnostics();
+    if measureComms then startVerboseComm();// startCommDiagnostics();
     if bfsAlgorithm == "default" then
-      runBFS(bfsParentVertexAgg, vertexView, sources, runs, teps, eCounts, "parent");
+      if !runProfile then
+        runBFS(bfsParentVertexAgg, vertexView, sources, runs, teps, eCounts, "parent");
+      else 
+        runBFSProfiler(bfsParentVertexAggProfile, vertexView, sources, runs, teps, eCounts, "parents");
     else if bfsAlgorithm == "custom" then
       runBFS(bfsLevelVertexAgg, vertexView, sources, runs, teps, eCounts, "level");
-    if measureComms then stopCommDiagnostics();
+    if measureComms then stopVerboseComm();// stopCommDiagnostics();
     if measureComms { 
       try! commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, "bfs");
       resetCommDiagnostics();
@@ -152,7 +177,11 @@ module Main {
     writef("%<40s %i\n", "edgefactor:", edgeFactor);
     writef("%<40s %i\n", "NBFS:", trials);
     writef("%<40s %dr\n", "graph_generation:", edgeListGenTime);
-    writef("%<40s %i\n", "num_tasks_per_locale:", here.numPUs());
+    var taskCount:int = 0;
+    coforall loc in Locales with (+ reduce taskCount) do on loc {
+      taskCount += here.maxTaskPar;
+    }
+    writef("%<40s %i\n", "num chapel tasks:", taskCount);
     writef("%<40s %dr\n", "construction_time:", graphConstructionTime);
     
     var (bfsMean, bfsStdDev, bfsMinimum, bfsFirstQuartile, bfsMedian, 
