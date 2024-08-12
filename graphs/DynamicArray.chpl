@@ -216,15 +216,18 @@ module DynamicArray {
         on Locales[loc] {
           queues[(queueIdx+1)%2].lock.acquire();
           ref q = queues[(queueIdx+1)%2];
-          const orig_size = q.sz;
-          q.preallocate(orig_size + myBufferIdx);
-          q.sz = orig_size + myBufferIdx;
-          var curr_idx = orig_size;
+          var curr_idx:int;
+          var resized:bool = false;
           for srcVal in rBuffer.localIter(remBufferPtr, myBufferIdx) {
             var (v,p) = srcVal;
-            // writeln("visitedAR[v] = ", visitedAR[v]);
             if visitedAR[v] == false {
-              // writeln("visting ", v);
+              if !resized {
+                const orig_size = q.sz;
+                q.preallocate(orig_size + myBufferIdx);
+                q.sz = orig_size + myBufferIdx;
+                curr_idx = orig_size;
+                resized = true;
+              }
               visitedAR[v] = true;
               parents[v] = p;
               q.arr[curr_idx] = v;

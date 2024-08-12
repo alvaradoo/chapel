@@ -7,7 +7,7 @@ use EdgeCentricGraph;
 use VertexCentricGraph;
 use BreadthFirstSearch;
 
-const lowerSCALE = 6;
+const lowerSCALE = 1;
 const upperSCALE = 10;
 const eFACTOR = 16;
 const trials = 5;

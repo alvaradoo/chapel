@@ -97,8 +97,6 @@ module BreadthFirstSearch {
     visitedAR = false;
     parents = -1;
     queueIdx = 0;
-
-    writeln("visitedAR = ", visitedAR);
     
     var frontierSize:int = 0;
     on graph.findLoc(internalSource) {
@@ -110,9 +108,7 @@ module BreadthFirstSearch {
 
     while frontierSize > 0 {
       coforall loc in Locales do on loc {
-        forall u in queues[queueIdx] 
-        with (var agg = new DynamicArrayDstAggregator((int,int))) {
-          // writeln("Iterating over neighbors of ", u, ": ", graph.neighborsInternal(u));
+        forall u in queues[queueIdx] with (var agg = new DynamicArrayDstAggregator((int,int))) {
           for v in graph.neighborsInternal(u) do
             agg.copy(graph.findLocNewer(v), (v,u));
         }
@@ -122,9 +118,7 @@ module BreadthFirstSearch {
       frontierSize = 0;
       coforall loc in Locales with (+ reduce frontierSize) do on loc {
         frontierSize += queues[queueIdx].size;
-        // writeln("on loc ", here.id, " queues = ", queues[queueIdx]);
       }
-      // writeln("frontierSize = ", frontierSize);
     }
     return parents;
   }
