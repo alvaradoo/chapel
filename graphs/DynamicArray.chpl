@@ -82,7 +82,7 @@ module DynamicArray {
       sz += otherSz;
     }
 
-    proc ref append(elt : int) {
+    proc ref append(elt : eltType) {
       if sz == cap {
         var oldCap = cap;
         cap = round(cap * arrayGrowthRate) : int;
@@ -115,7 +115,7 @@ module DynamicArray {
   var arrDom = {0..<numLocales} dmapped arrDist;
   
   // Declare global visited bytemap to track if a vertex has been visited.
-  var visitedAR: [arrDom] bool;
+  var visited: [arrDom] bool;
 
   // Declare global parents array to keep track of the parent of each vertex.
   var parents: [arrDom] int;
@@ -220,7 +220,7 @@ module DynamicArray {
           var resized:bool = false;
           for srcVal in rBuffer.localIter(remBufferPtr, myBufferIdx) {
             var (v,p) = srcVal;
-            if visitedAR[v] == false {
+            if visited[v] == false {
               if !resized {
                 const orig_size = q.sz;
                 q.preallocate(orig_size + myBufferIdx);
@@ -228,7 +228,7 @@ module DynamicArray {
                 curr_idx = orig_size;
                 resized = true;
               }
-              visitedAR[v] = true;
+              visited[v] = true;
               parents[v] = p;
               q.arr[curr_idx] = v;
               curr_idx += 1;

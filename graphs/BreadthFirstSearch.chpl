@@ -80,7 +80,69 @@ module BreadthFirstSearch {
     return edgeCount;
   }
 
-  proc bfsParentVertexArray(inGraph: shared Graph, internalSource:int) {
+  proc bfsParentVertexJenkins(inGraph: shared Graph, internalSource:int) {
+    use DynamicArray;
+    use RangeChunk;
+    var graph = toVertexCentricGraph(inGraph);
+    var lo = graph.vertexMapper.domain.low;
+    var hi = graph.vertexMapper.domain.high;
+
+    var globalWorkDom = {0..1} dmapped new replicatedDist();
+    var globalWork: [globalWorkDom] Array(2*int);
+    var globalWorkIdx: int;
+
+    // Create  parents and visited to match current graph dimensions.
+    var arrDist = new blockDist({lo..hi});
+    var arrDom = {lo..hi} dmapped arrDist;
+    var parents: [arrDom] int;
+    var visited: [arrDom] bool;
+    visited = false;
+    parents = -1;
+    globalWorkIdx = 0;
+    
+    var frontierSize:int = 0;
+    on graph.findLoc(internalSource) {
+      globalWork[globalWorkIdx].append((internalSource,internalSource));
+    }
+    frontierSize = 1;
+
+    while frontierSize > 0 {
+      var pendingWork = false;
+      coforall loc in Locales with (|| reduce pendingWork) do on loc {
+        var localeWork: [LocaleSpace] Array(2*int);
+        ref workQueue = globalWork[globalWorkIdx]; 
+        coforall chunk in chunks(0..#workQueue.size, numChunks=here.maxTaskPar)
+        with (||reduce pendingWork) {
+          var localWork: [LocaleSpace] Array(2*int);
+          for u in workQueue[chunk] {
+            if visited[u[0]] == false {
+              visited[u[0]] = true;
+              parents[u[0]] = u[1];
+              pendingWork = true;
+            }
+            for v in graph.neighborsInternal(u[0]) do
+              localWork[graph.findLocNewer(v)].append((v,u[0]));
+          }
+          for (_localeWork, _localWork) in zip(localeWork, localWork) {
+            _localeWork.lock.acquire();
+            _localeWork.append(_localWork);
+            _localeWork.lock.release();
+          }
+        }
+        coforall loc in Locales do on loc {
+          globalWork[(globalWorkIdx+1)%2].lock.acquire();
+          globalWork[(globalWorkIdx+1)%2].append(localeWork[here.id]);
+          globalWork[(globalWorkIdx+1)%2].lock.release();
+        }
+      }
+      globalWork[globalWorkIdx].clear();
+      globalWorkIdx = (globalWorkIdx + 1) % 2;
+      if !pendingWork then break;
+    }
+    return parents;
+  }
+
+  proc bfsParentVertexRolinger(inGraph: shared Graph, internalSource:int) {
     use DynamicArray;
     var graph = toVertexCentricGraph(inGraph);
     var lo = graph.vertexMapper.domain.low;
@@ -94,14 +156,14 @@ module BreadthFirstSearch {
     // Change parents and visited to match current graph dimensions.
     arrDist.redistribute({lo..hi});
     arrDom = {lo..hi};
-    visitedAR = false;
+    visited = false;
     parents = -1;
     queueIdx = 0;
     
     var frontierSize:int = 0;
     on graph.findLoc(internalSource) {
       queues[queueIdx].append(internalSource);
-      visitedAR[internalSource] = true;
+      visited[internalSource] = true;
       parents[internalSource] = internalSource;
     }
     frontierSize = 1;

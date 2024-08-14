@@ -7,10 +7,10 @@ use EdgeCentricGraph;
 use VertexCentricGraph;
 use BreadthFirstSearch;
 
-const lowerSCALE = 1;
-const upperSCALE = 10;
-const eFACTOR = 16;
-const trials = 5;
+config const lowerSCALE = 1;
+config const upperSCALE = 10;
+config const eFACTOR = 16;
+config const trials = 5;
 var globalCheck:bool = true;
 
 for SCALE in lowerSCALE..upperSCALE {
@@ -26,20 +26,19 @@ for SCALE in lowerSCALE..upperSCALE {
   var final:bool;
   for s in sourcesIdx {
     var parentVertex = bfsParentVertexAgg(toGraph(vertexView), s);
-    var parentVertexArray = bfsParentVertexArray(toGraph(vertexView), s);
-    var parentEdge = bfsParentEdgeAgg(toGraph(edgeView), s);
+    var parentVertexRolinger = bfsParentVertexRolinger(toGraph(vertexView), s);
+    var parentVertexJenkins = bfsParentVertexJenkins(toGraph(vertexView), s);
     var levelVertex = bfsLevelVertexAgg(toGraph(vertexView), s);
-    var levelEdge = bfsLevelEdgeAgg(toGraph(edgeView), s);
 
     var p2LVertex = parentToLevel(parentVertex,s);
-    var p2LEdge = parentToLevel(parentEdge,s);
-    var pA2LVertex = parentToLevel(parentVertexArray,s);
+    var p2LRolinger = parentToLevel(parentVertexRolinger,s);
+    var p2LJenkins = parentToLevel(parentVertexJenkins,s);
     
     var check1 = && reduce (p2LVertex == levelVertex);
-    var check2 = && reduce (p2LEdge == levelVertex);
-    var check3 = && reduce (levelEdge == levelVertex);
-    var check4 = && reduce (pA2LVertex == levelVertex);
-    final = globalCheck && check1 && check2 && check3 && check4;
+    var check2 = && reduce (p2LRolinger == levelVertex);
+    var check3 = && reduce (p2LJenkins == levelVertex);
+
+    final = globalCheck && check1 && check2 && check3;
   }
   writeln("All levels match for SCALE ", SCALE, " RMAT graph: ", final);
 }
