@@ -15,7 +15,7 @@ module Graph {
   var placeHolderBlockAVertex = blockDist.createArray({0..1}, vertex);
 
   proc toEdgeCentricGraph(inGraph:Graph) {
-    return try! inGraph: shared EdgeCentricGraph(
+    return try! inGraph:shared EdgeCentricGraph(
       placeHolderBlockA.type,
       placeHolderBlockA.type,
       placeHolderBlockA.type,

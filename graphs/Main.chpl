@@ -162,7 +162,7 @@ module Main {
     if measureComms then startVerboseComm();// startCommDiagnostics();
     if bfsAlgorithm == "default" then
       if !runProfile then
-        runBFS(bfsParentVertexAgg, vertexView, sources, runs, teps, eCounts, "parent");
+        runBFS(bfsLevelVertex, vertexView, sources, runs, teps, eCounts, "parent");
       else 
         runBFSProfiler(bfsParentVertexAggProfile, vertexView, sources, runs, teps, eCounts, "parents");
     else if bfsAlgorithm == "custom" then
