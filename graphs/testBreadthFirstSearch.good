@@ -1,11 +1,2 @@
 $CHPL_HOME/modules/dists/BlockDist.chpl:978: warning: returning an atomic by value is deprecated
-All levels match for SCALE 1 RMAT graph: true
-All levels match for SCALE 2 RMAT graph: true
-All levels match for SCALE 3 RMAT graph: true
-All levels match for SCALE 4 RMAT graph: true
-All levels match for SCALE 5 RMAT graph: true
-All levels match for SCALE 6 RMAT graph: true
-All levels match for SCALE 7 RMAT graph: true
-All levels match for SCALE 8 RMAT graph: true
-All levels match for SCALE 9 RMAT graph: true
-All levels match for SCALE 10 RMAT graph: true
+ALL TESTS PASSED.

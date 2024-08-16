@@ -17,6 +17,10 @@ module DynamicArray {
   record Lock {
     var _lock : chpl__processorAtomicType(bool);
     
+    proc init() {
+      this._lock = false;
+    }
+    
     inline proc ref acquire(){
       on this do local {
         if _lock.testAndSet() == true {

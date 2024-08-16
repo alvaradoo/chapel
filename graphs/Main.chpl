@@ -20,15 +20,17 @@ module Main {
   config const edgeFactor = 16;
   config const (a,b,c,d) = (0.57,0.19,0.19,0.05);
   config const maxWeight = 2;
+  config const trials = 64;
 
-  config const measureComms = false;
+  config const measureVerboseComms = false; // prints verbose comms
+  config const measureComms = false; // sends verbose comms to table
   config const identifier = "rmat";
+  config const bfsAlgorithm = "default";
 
-  config const bfsAlgorithm = "default"; // or custom
   config const skipValidation = true;
   config const skipBFSprints = false;
-  config const trials = 64;
-  config const runProfile = false;
+
+  var commFileIdentifier:string;
 
   /*
     The BFS procedures should be designed as first-class functions that 
@@ -41,12 +43,25 @@ module Main {
   proc runBFS(method, graph, const ref sources, ref runs, ref teps, ref eCounts,
               methodReturn:string) {
     var timer:stopwatch;
+    var methodFull = (method:string).split("(");
+    var methodName:string;
+    for (d,m) in zip(methodFull.domain, methodFull) {
+      if d == 0 then methodName = m.replace("proc ", "");
+      break;
+    }
+
     for i in 1..trials {
       var source = sources[i];
-      if !skipBFSprints then writef("Running BFS %i\n", source);
+      if !skipBFSprints then writef("Running %s %i\n", methodName, source);
+      
+      if measureVerboseComms then startVerboseComm();
+      if measureComms then startCommDiagnostics();
       timer.start();
       var res = method(graph:shared Graph, source);
       timer.stop();
+      if measureVerboseComms then stopVerboseComm();
+      if measureComms then stopCommDiagnostics();
+
       var edgeCount = getEdgeCountForTeps(res, graph) / 2;
       /* Not needed yet until validation can be enabled.
       var levels = if methodReturn == "parent" then parentToLevel(res, source) 
@@ -60,6 +75,10 @@ module Main {
       }
       if !skipValidation then halt("Validation not yet integrated.");
       timer.reset();
+    }
+    if measureComms { 
+      try! commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, methodName);
+      resetCommDiagnostics();
     }
   }
 
@@ -120,8 +139,7 @@ module Main {
 
     var timer:stopwatch;
     var isRandom = if filepath.size > 0 then false else true;
-    var commFileIdentifier:string;
-    if measureComms && isRandom then commFileIdentifier = identifier + "_" + scale:string;
+    if measureComms && isRandom then commFileIdentifier = "benchmarks/" + identifier + "_" + scale:string;
     else if measureComms then commFileIdentifier = identifier;
     else commFileIdentifier = "";
 
@@ -159,19 +177,21 @@ module Main {
     var eCounts: [1..trials] int;
     fillRandom(sources, 0, n-1);
     
-    if measureComms then startVerboseComm();// startCommDiagnostics();
-    if bfsAlgorithm == "default" then
-      if !runProfile then
-        runBFS(bfsLevelVertex, vertexView, sources, runs, teps, eCounts, "parent");
-      else 
-        runBFSProfiler(bfsParentVertexAggProfile, vertexView, sources, runs, teps, eCounts, "parents");
-    else if bfsAlgorithm == "custom" then
+    if bfsAlgorithm == "graph500" then
+      runBFS(bfsParentVertexGraph500, vertexView, sources, runs, teps, eCounts, "parent");
+    else if bfsAlgorithm == "parentVertexAgg" then
+      runBFS(bfsParentVertexAgg, vertexView, sources, runs, teps, eCounts, "parent");
+    else if bfsAlgorithm == "jenkins" then
+      runBFS(bfsParentVertexJenkins, vertexView, sources, runs, teps, eCounts, "parent");
+    else if (bfsAlgorithm == "levelVertexAgg") then
       runBFS(bfsLevelVertexAgg, vertexView, sources, runs, teps, eCounts, "level");
-    if measureComms then stopVerboseComm();// stopCommDiagnostics();
-    if measureComms { 
-      try! commDiagnosticsToCsv(getCommDiagnostics(), commFileIdentifier, "bfs");
-      resetCommDiagnostics();
-    }
+    else if (bfsAlgorithm == "levelVertex") then
+      runBFS(bfsLevelVertex, vertexView, sources, runs, teps, eCounts, "level");
+    else if (bfsAlgorithm == "levelAggregationVertex") then
+      runBFS(bfsAggregationVertex, vertexView, sources, runs, teps, eCounts, "level");
+    else if (bfsAlgorithm == "levelNoAggregationVertex") then
+      runBFS(bfsNoAggregationVertex, vertexView, sources, runs, teps, eCounts, "level");
+    else halt("Unrecognized BFS method");
 
     writef("%<40s %i\n", "SCALE:", scale);
     writef("%<40s %i\n", "edgefactor:", edgeFactor);

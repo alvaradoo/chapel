@@ -109,7 +109,7 @@ module Aggregators {
   var SpecialtyVertexDom  = {0..<numLocales} dmapped SpecialtyVertexDist;
   
   // Declare global visited bitmap to track if a vertex has been visited or not.
-  var visitedMA: [SpecialtyVertexDom] atomic bool;
+  var visitedMA: [SpecialtyVertexDom] chpl__processorAtomicType(bool);
 
   // Declare global parents array to keep track of the parent of each vertex.
   var parentsMA: [SpecialtyVertexDom] int;

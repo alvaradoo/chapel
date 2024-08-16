@@ -7,16 +7,17 @@ use EdgeCentricGraph;
 use VertexCentricGraph;
 use BreadthFirstSearch;
 
-config const lowerSCALE = 1;
-config const upperSCALE = 10;
-config const eFACTOR = 16;
+config const lowerScale = 4;
+config const upperScale = 7;
+config const eFactor = 16;
 config const trials = 5;
+config const debug = false;
 var globalCheck:bool = true;
 
-for SCALE in lowerSCALE..upperSCALE {
-  var ns = 2**SCALE;
-  var ms = 2**SCALE * eFACTOR;
-  var edgeView = genRMATgraph(0.57,0.19,0.19,0.05,SCALE,ns,ms,2);
+for scale in lowerScale..upperScale {
+  var ns = 2**scale;
+  var ms = 2**scale * eFactor;
+  var edgeView = genRMATgraph(0.57,0.19,0.19,0.05,scale,ns,ms,2);
   var vertexView = new shared VertexCentricGraph(edgeView);
 
   var sourcesIdx:[1..trials] int;
@@ -25,20 +26,41 @@ for SCALE in lowerSCALE..upperSCALE {
   
   var final:bool;
   for s in sourcesIdx {
-    var parentVertex = bfsParentVertexAgg(toGraph(vertexView), s);
-    var parentVertexRolinger = bfsParentVertexRolinger(toGraph(vertexView), s);
     var parentVertexJenkins = bfsParentVertexJenkins(toGraph(vertexView), s);
-    var levelVertex = bfsLevelVertexAgg(toGraph(vertexView), s);
+    var parentVertexGraph500 = bfsParentVertexGraph500(toGraph(vertexView), s);
+    var parentVertexAgg = bfsParentVertexAgg(toGraph(vertexView), s);
+    var levelVertexAgg = bfsLevelVertexAgg(toGraph(vertexView), s);
+    var levelVertex = bfsLevelVertex(toGraph(vertexView), s); // ground truth
+    var levelAggregationVertex = bfsAggregationVertex(toGraph(vertexView), s);
+    var levelNoAggregationVertex = bfsNoAggregationVertex(toGraph(vertexView), s);
 
-    var p2LVertex = parentToLevel(parentVertex,s);
-    var p2LRolinger = parentToLevel(parentVertexRolinger,s);
     var p2LJenkins = parentToLevel(parentVertexJenkins,s);
+    var p2LGraph500 = parentToLevel(parentVertexGraph500,s);
+    var p2LVertexAgg = parentToLevel(parentVertexAgg,s);
     
-    var check1 = && reduce (p2LVertex == levelVertex);
-    var check2 = && reduce (p2LRolinger == levelVertex);
-    var check3 = && reduce (p2LJenkins == levelVertex);
+    var jenkinsCheck = && reduce (p2LJenkins == levelVertex);
+    var Graph500Check = && reduce (p2LGraph500 == levelVertex);
+    var parentVertexAggCheck = && reduce (p2LVertexAgg == levelVertex);
+    var levelVertexAggCheck = && reduce (levelVertexAgg == levelVertex);
+    var levelAggregationVertexCheck = && reduce (levelAggregationVertex == levelVertex);
+    var levelNoAggregationVertexCheck = && reduce (levelNoAggregationVertex == levelVertex);
 
-    final = globalCheck && check1 && check2 && check3;
+    final = globalCheck && jenkinsCheck && Graph500Check && parentVertexAggCheck 
+                        && levelVertexAggCheck && levelAggregationVertexCheck
+                        && levelNoAggregationVertexCheck;
+
+    if debug {
+      writeln("Outputs for scale ", scale, " and source ", s, ": ");
+      writeln("jenkinsCheck = ", jenkinsCheck);
+      writeln("Graph500Check = ", Graph500Check);
+      writeln("parentVertexAggCheck = ", parentVertexAggCheck);
+      writeln("levelVertexAggCheck = ", levelVertexAggCheck);
+      writeln("levelAggregationVertexCheck = ", levelAggregationVertexCheck);
+      writeln("levelNoAggregationVertexCheck = ", levelNoAggregationVertexCheck);
+      writeln();
+    }
+    
+    if !final then halt("One of previous checks does not pass!");
   }
-  writeln("All levels match for SCALE ", SCALE, " RMAT graph: ", final);
 }
+writeln("ALL TESTS PASSED.");
