@@ -2,6 +2,7 @@ module BreadthFirstSearch {
   // Chapel modules.
   use List;
   use Set;
+  use Time;
   use BlockDist;
   use ReplicatedDist;
   use ReplicatedVar;
@@ -15,6 +16,8 @@ module BreadthFirstSearch {
   use EdgeCentricGraph;
   use VertexCentricGraph;
   use Aggregators;
+
+  param profile:bool = true;
 
   /****************************************************************************/
   /****************************************************************************/
@@ -76,6 +79,117 @@ module BreadthFirstSearch {
       frontiers[frontiersIdx].clear();
       frontiersIdx = (frontiersIdx + 1) % 2;
       visitedReduced = || reduce visited;
+    }
+    return level;
+  }
+
+  proc bfsParentVertexAgg(inGraph: shared Graph, internalSource:int) {
+    var graph = toVertexCentricGraph(inGraph);
+    var lo = graph.vertexMapper.domain.low;
+    var hi = graph.vertexMapper.domain.high;
+    var timer:stopwatch;
+    
+    if profile then timer.start();
+    coforall loc in Locales with (ref frontiers) do on loc {
+      frontiers[0] = new list(int, parSafe=true);
+      frontiers[1] = new list(int, parSafe=true);
+    }
+    if profile {
+      writef("Time for frontier initilization is %dr\n", timer.elapsed());
+      timer.restart();
+    }
+
+    // Change parentsMA and visitedMA to match current graph dimensions.
+    SpecialtyVertexDist.redistribute({lo..hi});
+    SpecialtyVertexDom = {lo..hi};
+    forall a in visitedMA do a.write(false);
+    parentsMA = -1;
+    frontiersIdx = 0;
+    if profile {
+      writef("Time for visited and parent initilization is %dr\n", timer.elapsed());
+      timer.restart();
+    }
+    
+    var frontierSize:int = 0;
+    on graph.findLoc(internalSource) {
+      frontiers[frontiersIdx].pushBack(internalSource);
+      visitedMA[internalSource].write(true);
+      parentsMA[internalSource] = internalSource;
+    }
+    frontierSize = 1;
+    if profile {
+      writef("Time for visiting source is %dr\n", timer.elapsed());
+      timer.restart();
+    }
+
+    while frontierSize > 0 {
+      frontierSize = 0;
+      var innerTimer:stopwatch;
+      if profile then innerTimer.start();
+      coforall loc in Locales with (+ reduce frontierSize) 
+      do on loc {
+        frontierSize += frontiers[frontiersIdx].size;
+        var localeTimer:stopwatch;
+        if profile then localeTimer.start();
+        forall u in frontiers[frontiersIdx] 
+        with (var frontierAgg = new SpecialtyVertexDstAggregator((int,int))) {
+          for v in graph.neighborsInternal(u) do
+            frontierAgg.copy(graph.findLocNewer(v), (v,u));
+        }
+        frontiers[frontiersIdx].clear();
+        if profile {
+          writef("Time on locale %i expanding frontier of size %i is %dr\n", 
+                  here.id, frontierSize, localeTimer.elapsed());
+          localeTimer.reset();
+        }
+      }
+      frontiersIdx = (frontiersIdx + 1) % 2;
+      if profile && frontierSize != 0 {
+        writef("Time for BFS iteration is %dr\n", innerTimer.elapsed());
+        innerTimer.reset();
+      }
+    }
+    return parentsMA;
+  }
+
+  proc bfsLevelVertexAgg(inGraph: shared Graph, internalSource:int) {
+    var graph = toVertexCentricGraph(inGraph);
+
+    coforall loc in Locales with(ref frontiers) do on loc {
+      frontiers[0] = new list(int, parSafe=true);
+      frontiers[1] = new list(int, parSafe=true);
+    }
+    frontiersIdx = 0;
+
+    on graph.findLoc(internalSource) {
+      frontiers[frontiersIdx].pushBack(internalSource);
+    }
+    var currLevel = 0; 
+    var level = blockDist.createArray(graph.vertexMapper.domain, int);
+    level = -1;
+    var frontierSize = 1;
+
+    // Declare global visited bitmap to track if a vertex has been visited or not.
+    var visitedD = blockDist.createDomain(graph.vertexMapper.domain);
+    var visited: [visitedD] chpl__processorAtomicType(bool);
+
+    while frontierSize > 0 {
+      frontierSize = 0;
+      coforall loc in Locales with (+ reduce frontierSize) do on loc {
+        frontierSize += frontiers[frontiersIdx].size;
+        forall u in frontiers[frontiersIdx] 
+        with (var frontierAgg = new listDstAggregator(int)) 
+        {
+          if !visited[u].testAndSet() {
+            level[u] = currLevel;
+            for v in graph.neighborsInternal(u) do 
+              frontierAgg.copy(graph.findLocNewer(v), v);
+          }
+        }
+        frontiers[frontiersIdx].clear();
+      }
+      currLevel += 1;
+      frontiersIdx = (frontiersIdx + 1) % 2;
     }
     return level;
   }
@@ -169,7 +283,9 @@ module BreadthFirstSearch {
     frontierSize = 1;
 
     while frontierSize > 0 {
-      coforall loc in Locales do on loc {
+      frontierSize = 0;
+      coforall loc in Locales with (+ reduce frontierSize) do on loc {
+        frontierSize += queues[queueIdx].size;
         forall u in queues[queueIdx] with (var agg = new DynamicArrayDstAggregator((int,int))) {
           for v in graph.neighborsInternal(u) do
             agg.copy(graph.findLocNewer(v), (v,u));
@@ -177,98 +293,8 @@ module BreadthFirstSearch {
         queues[queueIdx].clear();
       }
       queueIdx = (queueIdx + 1) % 2;
-      frontierSize = 0;
-      coforall loc in Locales with (+ reduce frontierSize) do on loc {
-        frontierSize += queues[queueIdx].size;
-      }
     }
     return parents;
-  }
-
-  proc bfsParentVertexAgg(inGraph: shared Graph, internalSource:int) {
-    var graph = toVertexCentricGraph(inGraph);
-    var lo = graph.vertexMapper.domain.low;
-    var hi = graph.vertexMapper.domain.high;
-
-    coforall loc in Locales with (ref frontiers) do on loc {
-      frontiers[0] = new list(int, parSafe=true);
-      frontiers[1] = new list(int, parSafe=true);
-    }
-
-    // Change parentsMA and visitedMA to match current graph dimensions.
-    SpecialtyVertexDist.redistribute({lo..hi});
-    SpecialtyVertexDom = {lo..hi};
-    forall a in visitedMA do a.write(false);
-    parentsMA = -1;
-    frontiersIdx = 0;
-    
-    var frontierSize:int = 0;
-    on graph.findLoc(internalSource) {
-      frontiers[frontiersIdx].pushBack(internalSource);
-      visitedMA[internalSource].write(true);
-      parentsMA[internalSource] = internalSource;
-    }
-    frontierSize = 1;
-
-    while frontierSize > 0 {
-      frontierSize = 0;
-      coforall loc in Locales with (+ reduce frontierSize) 
-      do on loc {
-        frontierSize += frontiers[frontiersIdx].size;
-        forall u in frontiers[frontiersIdx] 
-        with (var frontierAgg = new SpecialtyVertexDstAggregator((int,int))) {
-          for v in graph.neighborsInternal(u) do
-            frontierAgg.copy(graph.findLocNewer(v), (v,u));
-        }
-        frontiers[frontiersIdx].clear();
-      }
-      frontiersIdx = (frontiersIdx + 1) % 2;
-    }
-    return parentsMA;
-  }
-
-  proc bfsLevelVertexAgg(inGraph: shared Graph, internalSource:int) {
-    var graph = toVertexCentricGraph(inGraph);
-
-    coforall loc in Locales with(ref frontiers) do on loc {
-      frontiers[0] = new list(int, parSafe=true);
-      frontiers[1] = new list(int, parSafe=true);
-    }
-    frontiersIdx = 0;
-
-    on graph.findLoc(internalSource) {
-      frontiers[frontiersIdx].pushBack(internalSource);
-    }
-    var currLevel = 0; 
-    var level = blockDist.createArray(graph.vertexMapper.domain, int);
-    level = -1;
-
-    // Declare global visited bitmap to track if a vertex has been visited or not.
-    var visitedD = blockDist.createDomain(graph.vertexMapper.domain);
-    var visited: [visitedD] atomic bool;
-
-    while true {
-      var pendingWork:bool;
-      coforall loc in Locales 
-      with (|| reduce pendingWork, ref level, ref frontiers) 
-      do on loc {
-        forall u in frontiers[frontiersIdx] 
-        with (|| reduce pendingWork, var frontierAgg=new listDstAggregator(int)) 
-        {
-          if !visited[u].testAndSet() {
-            level[u] = currLevel;
-            for v in graph.neighborsInternal(u) do 
-              frontierAgg.copy(graph.findLoc(v).id, v);
-            pendingWork = true;
-          }
-        }
-        frontiers[frontiersIdx].clear();
-      }
-      if !pendingWork then break;
-      currLevel += 1;
-      frontiersIdx = (frontiersIdx + 1) % 2;
-    }
-    return level;
   }
 
   proc bfsLevelVertex(inGraph: shared Graph, internalSource:int) {

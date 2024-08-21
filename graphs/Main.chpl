@@ -25,7 +25,7 @@ module Main {
   config const measureVerboseComms = false; // prints verbose comms
   config const measureComms = false; // sends verbose comms to table
   config const identifier = "rmat";
-  config const bfsAlgorithm = "default";
+  config const bfsAlgorithm = "parentVertexAgg";
 
   config const skipValidation = true;
   config const skipBFSprints = false;
@@ -82,27 +82,6 @@ module Main {
     }
   }
 
-  proc runBFSProfiler(method, graph, const ref sources, ref runs, ref teps, 
-                      ref eCounts, methodReturn:string) {
-    var timer:stopwatch;
-    for i in 1..trials {
-      var source = sources[i];
-      if !skipBFSprints then writef("Running BFS %i\n", source);
-      timer.start();
-      var res = method(graph:shared Graph, source);
-      timer.stop();
-      var edgeCount = getEdgeCountForTeps(res, graph) / 2;
-      /* Not needed yet until validation can be enabled.
-      var levels = if methodReturn == "parent" then parentToLevel(res, source) 
-                   else res; */
-      runs[i] = timer.elapsed();
-      eCounts[i] = edgeCount;
-      teps[i] = eCounts[i] / runs[i];
-      if !skipValidation then halt("Validation not yet integrated.");
-      timer.reset();
-    }
-  }
-
   /*
     Computes statistics for a given data array which could be an array of
     execution times or TEPs for BFS or SSSP.
@@ -140,7 +119,7 @@ module Main {
     var timer:stopwatch;
     var isRandom = if filepath.size > 0 then false else true;
     if measureComms && isRandom then commFileIdentifier = "benchmarks/" + identifier + "_" + scale:string;
-    else if measureComms then commFileIdentifier = identifier;
+    else if measureComms then commFileIdentifier = "benchmarks/" + identifier;
     else commFileIdentifier = "";
 
     var ns = if isRandom then 2**scale else 0;

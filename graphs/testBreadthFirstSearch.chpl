@@ -8,7 +8,7 @@ use VertexCentricGraph;
 use BreadthFirstSearch;
 
 config const lowerScale = 4;
-config const upperScale = 7;
+config const upperScale = 8;
 config const eFactor = 16;
 config const trials = 5;
 config const debug = false;
@@ -26,7 +26,6 @@ for scale in lowerScale..upperScale {
   
   var final:bool;
   for s in sourcesIdx {
-    var parentVertexJenkins = bfsParentVertexJenkins(toGraph(vertexView), s);
     var parentVertexGraph500 = bfsParentVertexGraph500(toGraph(vertexView), s);
     var parentVertexAgg = bfsParentVertexAgg(toGraph(vertexView), s);
     var levelVertexAgg = bfsLevelVertexAgg(toGraph(vertexView), s);
@@ -34,24 +33,21 @@ for scale in lowerScale..upperScale {
     var levelAggregationVertex = bfsAggregationVertex(toGraph(vertexView), s);
     var levelNoAggregationVertex = bfsNoAggregationVertex(toGraph(vertexView), s);
 
-    var p2LJenkins = parentToLevel(parentVertexJenkins,s);
     var p2LGraph500 = parentToLevel(parentVertexGraph500,s);
     var p2LVertexAgg = parentToLevel(parentVertexAgg,s);
-    
-    var jenkinsCheck = && reduce (p2LJenkins == levelVertex);
+
     var Graph500Check = && reduce (p2LGraph500 == levelVertex);
     var parentVertexAggCheck = && reduce (p2LVertexAgg == levelVertex);
     var levelVertexAggCheck = && reduce (levelVertexAgg == levelVertex);
     var levelAggregationVertexCheck = && reduce (levelAggregationVertex == levelVertex);
     var levelNoAggregationVertexCheck = && reduce (levelNoAggregationVertex == levelVertex);
 
-    final = globalCheck && jenkinsCheck && Graph500Check && parentVertexAggCheck 
+    final = globalCheck && Graph500Check && parentVertexAggCheck 
                         && levelVertexAggCheck && levelAggregationVertexCheck
                         && levelNoAggregationVertexCheck;
 
     if debug {
       writeln("Outputs for scale ", scale, " and source ", s, ": ");
-      writeln("jenkinsCheck = ", jenkinsCheck);
       writeln("Graph500Check = ", Graph500Check);
       writeln("parentVertexAggCheck = ", parentVertexAggCheck);
       writeln("levelVertexAggCheck = ", levelVertexAggCheck);
