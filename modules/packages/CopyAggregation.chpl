@@ -111,7 +111,6 @@ module CopyAggregation {
   record DstAggregator {
     type elemType;
     param custom = false;
-    /*type handlerType;*/
 
     @chpldoc.nodoc
     var agg: if aggregate then DstAggregatorImpl(elemType, ?)
@@ -187,10 +186,9 @@ module CopyAggregation {
   @chpldoc.nodoc
   record DstAggregatorImpl {
     type elemType;
-    /*param custom: bool;*/
     var handler;
     type aggType = (c_ptr(elemType), elemType);
-    const bufferSize = 3;
+    const bufferSize = dstBuffSize;
     const myLocaleSpace = 0..<numLocales;
     var lastLocale: int;
     var opsUntilYield = yieldFrequency;
@@ -211,11 +209,7 @@ module CopyAggregation {
     }
 
     proc ref deinit() {
-      writeln("deinitializing on ", here);
       flush();
-      /*if handler.type == int {*/
-        /*delete handler;*/
-      /*}*/
       for loc in myLocaleSpace {
         deallocate(lBuffers[loc]);
       }
@@ -260,6 +254,9 @@ module CopyAggregation {
       }
     }
 
+    // TODO what should a general copy function should look like? Most likely,
+    // users' custom handler should provide some sort of wrapper, or support
+    // function that should be called from the user side
     inline proc ref copy(const in srcVal: elemType) {
       if verboseAggregation {
         writeln("DstAggregator.copy is called");
@@ -272,7 +269,6 @@ module CopyAggregation {
       // Get our current index into the buffer for dst's locale
       ref bufferIdx = bufferIdxs[loc];
 
-      /*writeln(srcVal, " is buffered to go to locale ", loc);*/
       // Buffer the address and desired value
       lBuffers[loc][bufferIdx] = (dstAddr, srcVal);
       bufferIdx += 1;
@@ -294,7 +290,6 @@ module CopyAggregation {
     proc ref _flushBuffer(loc: int, ref bufferIdx, freeData) {
       if verboseAggregation {
         writeln("DstAggregator._flushBuffer is called on locale ", loc);
-        /*writeln("\tcustom: ", custom);*/
       }
       const myBufferIdx = bufferIdx;
       if myBufferIdx == 0 then return;
@@ -310,11 +305,8 @@ module CopyAggregation {
 
       // Process remote buffer
       on Locales[loc] {
-        writeln("remote handler locale ", rHandler.locale);
         for (dstAddr, srcVal) in rBuffer.localIter(remBufferPtr, myBufferIdx) {
           if !isNothing(handler) {
-            /*writeln("handler.handle on ", here, " ", srcVal, " &handle:",*/
-                    /*c_ptrTo(this));*/
             rHandler!.handle(dstAddr, srcVal);
           }
           else {
@@ -499,18 +491,11 @@ module AggregationPrimitives {
     }
 
     proc deinit() {
-      writeln("remoteHandler.deinit is called");
       delete localHandler;
     }
-    /*proc init(type t, original, loc: int) {*/
-      /*this.t = t;*/
-      /*this.original = original;*/
-      /*this.loc = loc;*/
-    /*}*/
 
     inline proc ref get() ref {
       if localHandler == nil {
-        writeln(here, " called remoteHandler.get. Will move to ", Locales[loc]);
         on Locales[loc] {
           localHandler = original!.sourceCopy();
         }
