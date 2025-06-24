@@ -753,7 +753,7 @@ module ChapelDistribution {
 
   record SparseIndexBuffer {
     param rank: int;
-    var obj: borrowed BaseSparseDom(?);
+    var obj: unmanaged BaseSparseDom(?);
 
     type idxType = if rank==1 then int else rank*int;
     var bufDom = domain(1);
@@ -868,7 +868,7 @@ module ChapelDistribution {
     override proc dsiAlignedHigh { return parentDom.high; }
 
     override proc dsiCreateIndexBuffer(size) {
-      return new SparseIndexBuffer(rank=this.rank, obj=this, size=size);
+      return new SparseIndexBuffer(rank=this.rank, obj=this:unmanaged, size=size);
     }
 
   } // end BaseSparseDom

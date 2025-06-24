@@ -209,7 +209,7 @@ module CopyAggregation {
     }
 
     proc ref deinit() {
-      flush();
+      flush(freeBuffers=true);
       for loc in myLocaleSpace {
         deallocate(lBuffers[loc]);
       }

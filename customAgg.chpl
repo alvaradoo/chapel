@@ -44,6 +44,8 @@ class AggregatedAddHandler {
 
 config const nnz = 50;
 config const n = 5000;
+writeln("nnz = ", nnz);
+writeln("n   = ", n);
 
 const Space = {1..n};
 const DenseDom = Space dmapped new blockDist(Space);
@@ -60,6 +62,4 @@ forall elem in IndexArr
 
   agg.copy(elem);
 }
-
-
-writeln(SparseDom.size);
+writeln("Size of SparseDom: ", SparseDom.size);
