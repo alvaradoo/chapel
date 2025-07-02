@@ -59,7 +59,17 @@ forall i in IndexArr.domain {
 
 forall elem in IndexArr
     with (var agg = new DstAggregator(new shared AggregatedAddHandler(SparseDom))) {
-
   agg.copy(elem);
 }
-writeln("Size of SparseDom: ", SparseDom.size);
+writeln("Size of SparseDom with Aggregation: ", SparseDom.size);
+
+// The below should be able to be written with +=, bulkAdd, or bulkAddPreserverInds, but they have been broken because
+// of remoteHandler in CopyAggregation.chpl
+var SparseDom2: sparse subdomain(DenseDom);
+forall elem in IndexArr with (ref SparseDom2) {
+  on SparseDom2.distribution.dsiIndexToLocale(elem) {
+    SparseDom2.add(elem);
+  }
+}
+
+writeln("Size of SparseDom without Aggregation: ", SparseDom2.size);
