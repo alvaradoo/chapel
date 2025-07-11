@@ -760,6 +760,11 @@ module ChapelDistribution {
     var buf: [bufDom] idxType;
     var cur = 0;
 
+    proc init(param rank: int, obj) {
+      this.rank = rank;
+      this.obj = obj;
+    }
+
     proc init(size, param rank: int, obj) {
       this.rank = rank;
       this.obj = obj;
